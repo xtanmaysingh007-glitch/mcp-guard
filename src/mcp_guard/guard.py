@@ -27,7 +27,7 @@ class Guard:
     def start_session(self, user_query: str) -> None:
         self.prov = Provenance()
         self.decisions = []
-        self.prov.add_trusted(user_query)
+        self.prov.add_user(user_query)
         self.n_sessions += 1
 
     def observe_output(self, tool: str, output: str) -> None:
@@ -38,10 +38,12 @@ class Guard:
 
     def check_call(self, tool: str, args: dict[str, Any]) -> Decision:
         bad: dict[str, list[str]] = {}
-        for arg in self.policy.forbid_tainted.get(tool, []):
+        checks = [(a, False) for a in self.policy.forbid_tainted.get(tool, [])]
+        checks += [(a, True) for a in self.policy.check_links_in.get(tool, [])]  # free text: links only
+        for arg, typed_only in checks:
             if arg in args:
-                atoms = (self.prov.unverified_atoms(args[arg]) if self.policy.mode == "allowlist"
-                         else self.prov.tainted_atoms(args[arg]))
+                atoms = (self.prov.unverified_atoms(args[arg], typed_only) if self.policy.mode == "allowlist"
+                         else self.prov.tainted_atoms(args[arg], typed_only))
                 if atoms:
                     bad[arg] = atoms
         if bad:

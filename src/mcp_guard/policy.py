@@ -14,6 +14,7 @@ MODES = ("allowlist", "taint")
 class Policy:
     trusted_tools: set[str] = field(default_factory=set)
     forbid_tainted: dict[str, list[str]] = field(default_factory=dict)  # tool -> guarded arg names
+    check_links_in: dict[str, list[str]] = field(default_factory=dict)  # tool -> free-text args: links only
     mode: str = "allowlist"  # allowlist: guarded args must trace to trusted data (default-deny)
                              # taint: block only values seen verbatim in untrusted data (weaker)
 
@@ -28,14 +29,22 @@ class Policy:
             trusted_tools=set(data.get("trusted_tools", [])),
             forbid_tainted={k: list(v) for k, v in (data.get("forbid_tainted") or {}).items()},
             mode=data.get("mode", "allowlist"),
+            check_links_in={k: list(v) for k, v in (data.get("check_links_in") or {}).items()},
         )
 
     def with_mode(self, mode: str) -> "Policy":
-        return Policy(set(self.trusted_tools), dict(self.forbid_tainted), mode)
+        return Policy(trusted_tools=set(self.trusted_tools), forbid_tainted=dict(self.forbid_tainted),
+                      check_links_in=dict(self.check_links_in), mode=mode)
 
     def without_trusted_tools(self) -> "Policy":
         """Ablation: treat every tool output as untrusted."""
-        return Policy(set(), dict(self.forbid_tainted), self.mode)
+        return Policy(trusted_tools=set(), forbid_tainted=dict(self.forbid_tainted),
+                      check_links_in=dict(self.check_links_in), mode=self.mode)
+
+    def without_link_checks(self) -> "Policy":
+        """Ablation: do not scan free-text args for links/emails/IBANs."""
+        return Policy(trusted_tools=set(self.trusted_tools), forbid_tainted=dict(self.forbid_tainted),
+                      check_links_in={}, mode=self.mode)
 
 
 DEFAULT_POLICY_PATH = Path(__file__).parent / "policies" / "agentdojo.yaml"

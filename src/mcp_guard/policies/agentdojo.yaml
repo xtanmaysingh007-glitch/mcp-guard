@@ -46,3 +46,10 @@ forbid_tainted:
   reserve_hotel: [hotel]
   reserve_restaurant: [restaurant]
   reserve_car_rental: [company]
+
+# Free-text arguments: only links / emails / IBANs inside them are checked (wording is ignored).
+# Stops "send Alice this link: www.phish.com" when the link came from untrusted data.
+check_links_in:
+  send_email: [body, subject]
+  send_direct_message: [body]
+  send_channel_message: [body]

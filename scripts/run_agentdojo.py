@@ -80,7 +80,19 @@ def make_throttled_client(rpm: float) -> httpx.Client:
     return httpx.Client(event_hooks={"request": [throttle], "response": [show_errors]}, timeout=120)
 
 
-def build_llm(provider: str):
+def preflight_ollama(client, model: str) -> None:
+    """Fail fast with a readable message instead of a 100-line traceback."""
+    try:
+        names = {m.id for m in client.models.list()}
+    except Exception as e:  # connection refused etc.
+        raise SystemExit(f"Cannot reach Ollama at {client.base_url} ({type(e).__name__}). "
+                         "Start the Ollama app (or run `ollama serve`) and check `ollama list` works.")
+    if model not in names and f"{model}:latest" not in names:
+        raise SystemExit(f"Ollama is running but model '{model}' is not installed. Installed: {sorted(names)}. "
+                         "Create it with: ollama create qwen2.5-7b-16k -f Modelfile.qwen7b")
+
+
+def build_llm(provider: str, ollama_model: str | None = None):
     """Returns (llm_element, pipeline_name). The pipeline name must contain a key from
     agentdojo.models.MODEL_NAMES because attacks look up how to address the model by it.
     Folder names must also be valid on Windows (no ':')."""
@@ -101,13 +113,15 @@ def build_llm(provider: str):
         # 'gemini-2.0-flash-001' suffix is only so AgentDojo addresses us as "AI model developed by Google".
         name = f"{model}__gemini-2.0-flash-001"
     elif provider == "ollama":
-        model = os.environ.get("OLLAMA_MODEL", "qwen2.5:7b")
+        model = ollama_model or os.environ.get("OLLAMA_MODEL", "qwen2.5-7b-16k")
+        print(f"Using Ollama model: {model}", flush=True)
         client = openai.OpenAI(
             api_key="ollama",
             base_url=os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434/v1"),
-            timeout=600,
-            max_retries=2,
+            timeout=900,
+            max_retries=30,  # ~4 min of Ollama downtime tolerated before giving up (backoff caps at 8s)
         )
+        preflight_ollama(client, model)
         llm = OpenAILLM(client, model)
         name = "local-" + model.replace(":", "-")  # 'local' key -> "Local model"
     else:
@@ -127,13 +141,14 @@ def main():
     ap.add_argument("--suite", choices=["workspace", "slack", "banking", "travel"], default="workspace")
     ap.add_argument("--attack", default="important_instructions")
     ap.add_argument("--defense", choices=DEFENSES, default="none")
+    ap.add_argument("--model", default=None, help="Ollama model name (overrides .env), e.g. qwen2.5-7b-16k")
     ap.add_argument("--n-user", type=int, default=None, help="only first N user tasks (saves API quota)")
     ap.add_argument("--n-inj", type=int, default=None, help="only first N injection tasks")
     ap.add_argument("--skip-clean", action="store_true", help="skip the no-attack utility run")
     ap.add_argument("--rerun", action="store_true", help="ignore cached logs")
     args = ap.parse_args()
 
-    llm, name = build_llm(args.provider)
+    llm, name = build_llm(args.provider, args.model)
     pipeline, guard = build_pipeline(llm, name, args.defense)
     suite = get_suite(BENCH_VERSION, args.suite)
     user_tasks = sorted(suite.user_tasks, key=lambda t: int(t.split("_")[-1]))[: args.n_user]
