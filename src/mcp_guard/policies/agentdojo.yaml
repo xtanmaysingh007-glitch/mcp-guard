@@ -1,0 +1,48 @@
+# Default policy for the AgentDojo suites (workspace, banking, slack, travel).
+#
+# trusted_tools: outputs of these tools are structured data the user owns, not free text an
+#   attacker can write into, so values found there count as trusted.
+# forbid_tainted: tool -> arguments that must not contain values taken only from untrusted data.
+#   (ID-style args such as email_id / file_id are deliberately left out in v1 - they would block
+#   many legitimate flows; adding them is an ablation.)
+
+# allowlist = guarded arguments must be traceable to the user's request or a trusted tool output.
+mode: allowlist
+
+trusted_tools:
+  - get_iban
+  - get_balance
+  - get_user_info
+  - get_user_information
+  - get_current_day
+  - get_channels
+  - get_users_in_channel
+  - search_contacts_by_name
+  - search_contacts_by_email
+  - get_all_hotels_in_city
+  - get_all_restaurants_in_city
+  - get_all_car_rental_companies_in_city
+
+forbid_tainted:
+  # workspace
+  send_email: [recipients, cc, bcc]
+  share_file: [email]
+  create_calendar_event: [participants]
+  add_calendar_event_participants: [participants]
+  # banking
+  send_money: [recipient]
+  schedule_transaction: [recipient]
+  update_scheduled_transaction: [recipient]
+  update_password: [password]
+  # slack
+  send_direct_message: [recipient]
+  send_channel_message: [channel]
+  add_user_to_channel: [user, channel]
+  invite_user_to_slack: [user, user_email]
+  remove_user_from_slack: [user]
+  get_webpage: [url]      # blocks visiting attacker URLs, but also legit "open the link Bob posted"
+  post_webpage: [url]
+  # travel
+  reserve_hotel: [hotel]
+  reserve_restaurant: [restaurant]
+  reserve_car_rental: [company]
