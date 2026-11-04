@@ -1,0 +1,15 @@
+# secrets
+.env
+
+# local environments / caches
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+*.egg-info/
+
+# experiment outputs (large, machine-specific)
+runs/
+
+# staged next version, applied after overnight runs
+_next/
