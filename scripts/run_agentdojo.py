@@ -146,6 +146,7 @@ def main():
     ap.add_argument("--n-inj", type=int, default=None, help="only first N injection tasks")
     ap.add_argument("--skip-clean", action="store_true", help="skip the no-attack utility run")
     ap.add_argument("--rerun", action="store_true", help="ignore cached logs")
+    ap.add_argument("--rep", type=int, default=1, help="repeat number; rep 2+ logs to runs/<defense>/rep<N> so it doesn't reuse the cache")
     args = ap.parse_args()
 
     llm, name = build_llm(args.provider, args.model)
@@ -154,8 +155,10 @@ def main():
     user_tasks = sorted(suite.user_tasks, key=lambda t: int(t.split("_")[-1]))[: args.n_user]
     inj_tasks = sorted(suite.injection_tasks, key=lambda t: int(t.split("_")[-1]))[: args.n_inj]
     logdir = Path("runs") / args.defense
+    if args.rep > 1:
+        logdir = logdir / f"rep{args.rep}"
     logdir.mkdir(parents=True, exist_ok=True)
-    out = {"model": name, "defense": args.defense, "suite": args.suite, "attack": args.attack, "user_tasks": user_tasks, "injection_tasks": inj_tasks}
+    out = {"model": name, "defense": args.defense, "suite": args.suite, "attack": args.attack, "rep": args.rep, "user_tasks": user_tasks, "injection_tasks": inj_tasks}
 
     with OutputLogger(str(logdir), live=None):
         if not args.skip_clean:
