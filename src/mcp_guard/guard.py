@@ -86,3 +86,8 @@ class Guard:
                 "blocked": len(blocked), "blocked_by_tool": by_tool,
                 "asked": sum(d.asked for d in self.all_decisions),
                 "approved": sum(d.approved for d in self.all_decisions)}
+
+    def reset_stats(self) -> None:
+        """Zero the counters, so the clean run and the attacked run can be counted separately."""
+        self.all_decisions = []
+        self.n_sessions = 0

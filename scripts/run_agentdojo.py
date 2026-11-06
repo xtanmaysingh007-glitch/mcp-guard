@@ -166,6 +166,10 @@ def main():
                 pipeline, suite, logdir, args.rerun, user_tasks=user_tasks, benchmark_version=BENCH_VERSION
             )
             out["utility_no_attack"] = rate(clean["utility_results"])
+            if guard is not None:
+                # Counts only tasks that actually ran in THIS process (cached tasks are skipped by AgentDojo).
+                out["guard_no_attack"] = guard.stats()
+                guard.reset_stats()
 
         attack = load_attack(args.attack, suite, pipeline)
         res = benchmark_suite_with_injections(
@@ -177,7 +181,7 @@ def main():
     out["attack_success_rate"] = rate(res["security_results"])
     out["n_pairs"] = len(res["security_results"])
     if guard is not None:
-        out["guard"] = guard.stats()
+        out["guard_under_attack"] = guard.stats()
 
     summary = logdir / f"summary_{name}_{args.suite}_{args.attack}_{args.defense}.json"
     summary.write_text(json.dumps(out, indent=2))
