@@ -9,7 +9,7 @@ Examples (PowerShell, from the project folder, venv active):
   python scripts/run_agentdojo.py --provider stub   --suite workspace --n-user 2 --n-inj 2   # offline smoke test
   python scripts/run_agentdojo.py --provider ollama --suite banking --defense none
   python scripts/run_agentdojo.py --provider ollama --suite banking --defense mcp_guard
-Defenses: none, mcp_guard, mcp_guard_taint, spotlighting, repeat_user_prompt, tool_filter
+Defenses: none, mcp_guard, mcp_guard_taint, mcp_guard_confirm_{no,yes,oracle}, spotlighting, repeat_user_prompt, tool_filter
 """
 import argparse
 import json

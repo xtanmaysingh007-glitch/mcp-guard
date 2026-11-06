@@ -149,6 +149,12 @@ class Provenance:
     def add_user(self, text: str) -> None:
         self.user.add(text)
 
+    def add_approved(self, atoms: list[str]) -> None:
+        """The user said yes to these exact values (confirm mode): from now on they count as user-given."""
+        for a in atoms:
+            self.user.typed.add(a)
+            self.user.text += "\n" + a
+
     def add_trusted(self, text: str) -> None:
         """Output of a trusted tool: only its whole values become trusted."""
         self.tool_values.add(text)

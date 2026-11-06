@@ -53,3 +53,13 @@ check_links_in:
   send_email: [body, subject]
   send_direct_message: [body]
   send_channel_message: [body]
+
+# Confirm mode (only used when a confirm function is supplied): a refused call to one of these tools is
+# shown to the user instead of being blocked outright. Money / password tools are deliberately NOT here.
+confirmable:
+  - get_webpage
+  - post_webpage
+  - invite_user_to_slack
+  - add_user_to_channel
+  - send_direct_message
+  - send_channel_message

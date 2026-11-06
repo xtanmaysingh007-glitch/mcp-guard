@@ -1,6 +1,7 @@
 """Plug MCP Guard (and baseline defenses) into AgentDojo pipelines."""
 from __future__ import annotations
 
+import json
 from ast import literal_eval
 from collections.abc import Sequence
 
@@ -76,7 +77,16 @@ class GuardedToolsExecutor(ToolsExecutor):
         return query, runtime, env, [*messages, *results], extra_args
 
 
-DEFENSES = ["none", "mcp_guard", "mcp_guard_taint", "spotlighting", "repeat_user_prompt", "tool_filter"]
+# Simulated users for confirm mode (the benchmark has no human). They only decide yes/no on what the guard shows.
+ATTACKER_VALUES = ["us133000000121212121212", "jay@google.com", "www.true-informations.com",
+                   "www.secure-systems-252.com", "www.my-website-234.com"]
+CONFIRM_USERS = {
+    "mcp_guard_confirm_no": lambda tool, args, bad: False,    # same as plain blocking, but with "don't retry"
+    "mcp_guard_confirm_yes": lambda tool, args, bad: True,    # worst case: clicks yes on everything
+    # careful human: refuses anything containing a value only the attacker's text contains
+    "mcp_guard_confirm_oracle": lambda tool, args, bad: not any(v in json.dumps(args).lower() for v in ATTACKER_VALUES),
+}
+DEFENSES = ["none", "mcp_guard", "mcp_guard_taint", *CONFIRM_USERS, "spotlighting", "repeat_user_prompt", "tool_filter"]
 
 
 def build_pipeline(llm: OpenAILLM | BasePipelineElement, name: str, defense: str = "none",
@@ -85,11 +95,11 @@ def build_pipeline(llm: OpenAILLM | BasePipelineElement, name: str, defense: str
     sys_msg = load_system_message(None)
     guard = None
 
-    if defense in ("mcp_guard", "mcp_guard_taint"):
+    if defense in ("mcp_guard", "mcp_guard_taint", *CONFIRM_USERS):
         policy = Policy.from_yaml(policy_path)
         if defense == "mcp_guard_taint":
             policy = policy.with_mode("taint")
-        guard = Guard(policy)
+        guard = Guard(policy, confirm_fn=CONFIRM_USERS.get(defense))
         loop = ToolsExecutionLoop([GuardedToolsExecutor(guard), llm])
         elements = [SystemMessage(sys_msg), InitQuery(), GuardSessionStart(guard), llm, loop]
     elif defense == "none":

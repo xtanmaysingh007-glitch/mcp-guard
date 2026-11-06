@@ -2,7 +2,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+import json
+from typing import Any, Callable
 
 from .policy import Policy
 from .provenance import Provenance
@@ -14,11 +15,16 @@ class Decision:
     tool: str
     reason: str = ""
     tainted: dict[str, list[str]] = field(default_factory=dict)  # arg -> offending atoms
+    asked: bool = False       # confirm mode: the user was shown this call
+    approved: bool = False    # ... and said yes
 
 
 class Guard:
-    def __init__(self, policy: Policy):
+    def __init__(self, policy: Policy, confirm_fn: Callable[[str, dict, dict], bool] | None = None):
+        """confirm_fn(tool, args, offending_atoms) -> bool. None = never ask, just block (default)."""
         self.policy = policy
+        self.confirm_fn = confirm_fn
+        self.refused: dict[str, int] = {}   # call fingerprint -> times refused this session
         self.prov = Provenance()
         self.decisions: list[Decision] = []      # current session
         self.all_decisions: list[Decision] = []  # across sessions (for stats)
@@ -27,6 +33,7 @@ class Guard:
     def start_session(self, user_query: str) -> None:
         self.prov = Provenance()
         self.decisions = []
+        self.refused = {}
         self.prov.add_user(user_query)
         self.n_sessions += 1
 
@@ -48,8 +55,22 @@ class Guard:
                     bad[arg] = atoms
         if bad:
             names = ", ".join(f"{a}={v}" for a, v in bad.items())
-            d = Decision(False, tool, f"blocked: argument(s) not traceable to the user or a trusted source ({names}). "
-                         "Only use values the user gave you or that come from trusted sources.", bad)
+            key = tool + json.dumps(args, sort_keys=True, default=str)
+            if self.refused.get(key, 0) >= 1 and self.confirm_fn is not None:
+                # already refused once: do not ask again, and tell the model to stop trying
+                d = Decision(False, tool, "blocked: the user already declined this exact call. Do not retry it "
+                             "or look for another way to do it.", bad)
+            elif self.confirm_fn is not None and tool in self.policy.confirmable:
+                if self.confirm_fn(tool, args, bad):
+                    self.prov.add_approved([a for v in bad.values() for a in v])
+                    d = Decision(True, tool, "approved by user", bad, asked=True, approved=True)
+                else:
+                    self.refused[key] = self.refused.get(key, 0) + 1
+                    d = Decision(False, tool, "blocked: the user declined this call. Do not retry it or look "
+                                 "for another way to do it.", bad, asked=True)
+            else:
+                d = Decision(False, tool, f"blocked: argument(s) not traceable to the user or a trusted source ({names}). "
+                             "Only use values the user gave you or that come from trusted sources.", bad)
         else:
             d = Decision(True, tool)
         self.decisions.append(d)
@@ -62,4 +83,6 @@ class Guard:
         for d in blocked:
             by_tool[d.tool] = by_tool.get(d.tool, 0) + 1
         return {"sessions": self.n_sessions, "guarded_checks": len(self.all_decisions),
-                "blocked": len(blocked), "blocked_by_tool": by_tool}
+                "blocked": len(blocked), "blocked_by_tool": by_tool,
+                "asked": sum(d.asked for d in self.all_decisions),
+                "approved": sum(d.approved for d in self.all_decisions)}
