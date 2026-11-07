@@ -26,9 +26,11 @@ argument must trace to the user's request or to a trusted tool's whole-value out
 - `src/mcp_guard/policy.py`, `policies/agentdojo.yaml` - trusted tools, guarded args, link checks, confirmable tools
 - `src/mcp_guard/guard.py` - allow / block / (confirm mode) ask the user
 - `src/mcp_guard/agentdojo_adapter.py` - defenses: none, mcp_guard, mcp_guard_taint,
-  mcp_guard_confirm_{no,yes,oracle}, spotlighting, repeat_user_prompt, tool_filter
-- `scripts/run_agentdojo.py`, `scripts/run_batch.py` (--reps, retries), `scripts/attribution.py`
-- `tests/test_guard.py` (24 tests; run `python -m pytest -q`)
+  mcp_guard_confirm_{no,yes,oracle}, mcp_guard_no_trusted, mcp_guard_no_links (ablations),
+  spotlighting, repeat_user_prompt, tool_filter
+- `scripts/run_agentdojo.py` (--no-attack = clean utility only, own summary file), `scripts/run_batch.py`
+  (--reps, retries), `scripts/attribution.py` (canaries for banking, slack, travel, workspace)
+- `tests/test_guard.py` (27 tests; run `python -m pytest -q`)
 - Run logs: `runs/<defense>/local-<model>-<defense>/<suite>/user_task_N/<attack>/injection_task_N.json`
 
 ## Evidence method
@@ -57,13 +59,24 @@ Do not use the user's own values as canaries (travel user_task_3 emails janeLong
 ## Known limitations
 Persuasion without a tool call; steering among trusted options; unguarded free-text/args (travel calendar
 title); default-deny blocks legit flows using untrusted URLs/emails; small samples, one small model.
+Workspace gaps (no guarded arg, so the guard cannot stop them): delete_file (injection_task_1 deletes file 13),
+delete_email (the "then delete the sent email" cleanup steps), cancel/reschedule_calendar_event, create_file /
+append_to_file content, calendar title/description/location (no link check, unlike email bodies), and
+send_email attachments (which file gets attached is not checked; the recipient is).
 
 ## Status / next steps
 Done: guard, harness, attribution, banking/slack/travel evidence, confirm mode (committed, slack benchmarked).
 Raw logs for older runs live in ~/Downloads/results*.zip (slack none/guard: results (3).zip).
-Next, in order:
-2. Workspace suite. 3. Ablations (policy.without_trusted_tools / without_link_checks). 4. Repeats on key
-numbers. 5. Adaptive attacks. 6. Rename, README (his voice), CI, LICENSE, limitations section, MCP proxy.
+Code ready, Kaggle runs pending (2026-11-07):
+- A: slack clean utility, all 21 user tasks, none / mcp_guard / mcp_guard_confirm_oracle (--no-attack).
+  Purpose: is the 40% vs 30% clean-utility gap real or 1-task noise?
+- B: ablations mcp_guard_no_trusted / mcp_guard_no_links on banking tool_knowledge + slack
+  important_instructions, 10 user x 5 inj.
+- C: workspace important_instructions, 8 user x 6 inj, none / mcp_guard / mcp_guard_confirm_oracle.
+  send_email and calendar tools are now confirmable (share_file is not). This also affects travel's
+  send_email in any future travel confirm run.
+Then: 4. Repeats on key numbers. 5. Adaptive attacks. 6. Rename, README (his voice), CI, LICENSE,
+limitations section, MCP proxy.
 
 ## Kaggle recipe (free, runs without the laptop)
 Notebook with GPU T4 x2, Internet on, ONE cell: install zstd/pciutils, `curl ollama.com/install.sh | sh`,
