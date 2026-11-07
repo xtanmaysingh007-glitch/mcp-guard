@@ -10,6 +10,7 @@ Examples (PowerShell, from the project folder, venv active):
   python scripts/run_agentdojo.py --provider ollama --suite banking --defense none
   python scripts/run_agentdojo.py --provider ollama --suite banking --defense mcp_guard
   python scripts/run_agentdojo.py --provider ollama --suite slack --defense mcp_guard --no-attack   # clean utility only
+  python scripts/run_agentdojo.py --provider ollama --suite workspace --user-tasks 13 25 33 --n-inj 6   # chosen tasks
 Defenses: none, mcp_guard, mcp_guard_taint, mcp_guard_confirm_{no,yes,oracle},
   mcp_guard_no_trusted, mcp_guard_no_links (ablations), spotlighting, repeat_user_prompt, tool_filter
 """
@@ -148,6 +149,8 @@ def main():
     ap.add_argument("--defense", choices=DEFENSES, default="none")
     ap.add_argument("--model", default=None, help="Ollama model name (overrides .env), e.g. qwen2.5-7b-16k")
     ap.add_argument("--n-user", type=int, default=None, help="only first N user tasks (saves API quota)")
+    ap.add_argument("--user-tasks", nargs="+", default=None, metavar="N",
+                    help="only these user tasks, by number (e.g. 4 13 25); pick them with scripts/injectable_tasks.py")
     ap.add_argument("--n-inj", type=int, default=None, help="only first N injection tasks")
     ap.add_argument("--skip-clean", action="store_true", help="skip the no-attack utility run")
     ap.add_argument("--no-attack", action="store_true", help="only the clean utility run (no injection tasks)")
@@ -161,6 +164,15 @@ def main():
     pipeline, guard = build_pipeline(llm, name, args.defense)
     suite = get_suite(BENCH_VERSION, args.suite)
     user_tasks = sorted(suite.user_tasks, key=lambda t: int(t.split("_")[-1]))[: args.n_user]
+    if args.user_tasks and args.n_user is not None:
+        ap.error("use --n-user or --user-tasks, not both")
+    if args.user_tasks:
+        # accept "13" or "user_task_13"; keep the suite's own order so runs are comparable
+        wanted = {f"user_task_{int(t.split('_')[-1])}" for t in args.user_tasks}
+        unknown = wanted - set(suite.user_tasks)
+        if unknown:
+            ap.error(f"not in {args.suite}: {sorted(unknown)}")
+        user_tasks = [t for t in user_tasks if t in wanted]
     inj_tasks = sorted(suite.injection_tasks, key=lambda t: int(t.split("_")[-1]))[: args.n_inj]
     logdir = Path("runs") / args.defense
     if args.rep > 1:
