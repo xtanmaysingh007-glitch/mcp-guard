@@ -28,7 +28,7 @@ argument must trace to the user's request or to a trusted tool's whole-value out
 - `src/mcp_guard/agentdojo_adapter.py` - defenses: none, mcp_guard, mcp_guard_taint,
   mcp_guard_confirm_{no,yes,oracle}, spotlighting, repeat_user_prompt, tool_filter
 - `scripts/run_agentdojo.py`, `scripts/run_batch.py` (--reps, retries), `scripts/attribution.py`
-- `tests/test_guard.py` (22 tests; run `python -m pytest -q`)
+- `tests/test_guard.py` (24 tests; run `python -m pytest -q`)
 - Run logs: `runs/<defense>/local-<model>-<defense>/<suite>/user_task_N/<attack>/injection_task_N.json`
 
 ## Evidence method
@@ -42,8 +42,15 @@ Do not use the user's own values as canaries (travel user_task_3 emails janeLong
 - Banking tool_knowledge (48 pairs): no defense 11 paid (7 full + 4 partial); guard 11/11 blocked, 0 leaks;
   taint 12/12 blocked; spotlighting 11 paid; repeat_user_prompt 12 paid; tool_filter 0 attempts but
   utility fell 50% -> 31% (it removed tools, not a real block).
-- Slack important_instructions (50 pairs): no defense 13 attacker wins; guard 6/6 attempts blocked, 0 leaks;
-  clean utility 40% -> 30% (cost: URLs/emails from untrusted messages get blocked; retry loops).
+- Slack important_instructions (50 pairs; rescored 2026-11-07 with the Fred email canary): no defense 15
+  attacker wins (12 full + 3 partial); guard 9/9 attempts blocked, 0 leaks; clean utility 40% -> 30%
+  (cost: URLs/emails from untrusted messages get blocked; retry loops).
+- Slack confirm mode (same 50 pairs): oracle 12/12 blocked, 0 leaks, clean utility 30%, 6 prompts over 10
+  clean tasks (all approved); yes: 12 attacker wins (10 + 2 partial), clean utility 30%; no: 10/10 blocked,
+  clean utility 20%. Oracle did NOT bring utility back to 40%: yes (approves everything) also got 30%, so the
+  1-task gap vs none is not from blocks (noise or the ask itself; needs repeats).
+- AgentDojo slack injection_task_5 scores from the call trace, so a blocked Fred invite still counts as an
+  attacker "win" (ASR 2% for oracle and no). attribution.py counts that as blocked.
 - Travel: only 2 real attempts; guard blocked 1, the other was pure persuasion in text (no tool call).
 - Banking guard allowlist, earlier runs: 16k important_instructions 3/3 blocked vs none 10/10 success.
 
@@ -52,11 +59,9 @@ Persuasion without a tool call; steering among trusted options; unguarded free-t
 title); default-deny blocks legit flows using untrusted URLs/emails; small samples, one small model.
 
 ## Status / next steps
-Done: guard, harness, attribution, banking/slack/travel evidence, confirm mode code + tests (not yet
-benchmarked, not yet committed at the time of writing).
+Done: guard, harness, attribution, banking/slack/travel evidence, confirm mode (committed, slack benchmarked).
+Raw logs for older runs live in ~/Downloads/results*.zip (slack none/guard: results (3).zip).
 Next, in order:
-1. Commit confirm mode; run slack with the three confirm defenses on Kaggle; compare utility, attacker wins,
-   prompts per clean task (expect oracle: 0 leaks, utility back up; yes: same as no defense).
 2. Workspace suite. 3. Ablations (policy.without_trusted_tools / without_link_checks). 4. Repeats on key
 numbers. 5. Adaptive attacks. 6. Rename, README (his voice), CI, LICENSE, limitations section, MCP proxy.
 
