@@ -10,7 +10,8 @@ Examples (PowerShell, from the project folder, venv active):
   python scripts/run_agentdojo.py --provider ollama --suite banking --defense none
   python scripts/run_agentdojo.py --provider ollama --suite banking --defense mcp_guard
   python scripts/run_agentdojo.py --provider ollama --suite slack --defense mcp_guard --no-attack   # clean utility only
-Defenses: none, mcp_guard, mcp_guard_taint, mcp_guard_confirm_{no,yes,oracle}, spotlighting, repeat_user_prompt, tool_filter
+Defenses: none, mcp_guard, mcp_guard_taint, mcp_guard_confirm_{no,yes,oracle},
+  mcp_guard_no_trusted, mcp_guard_no_links (ablations), spotlighting, repeat_user_prompt, tool_filter
 """
 import argparse
 import json

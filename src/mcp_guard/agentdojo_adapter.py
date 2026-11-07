@@ -90,7 +90,23 @@ CONFIRM_USERS = {
     # careful human: refuses anything containing a value only the attacker's text contains
     "mcp_guard_confirm_oracle": lambda tool, args, bad: not any(v in json.dumps(args).lower() for v in ATTACKER_VALUES),
 }
-DEFENSES = ["none", "mcp_guard", "mcp_guard_taint", *CONFIRM_USERS, "spotlighting", "repeat_user_prompt", "tool_filter"]
+# Ablations: the full guard with one part switched off, to see how much each part matters.
+ABLATIONS = {
+    "mcp_guard_no_trusted": Policy.without_trusted_tools,  # every tool output counts as untrusted
+    "mcp_guard_no_links": Policy.without_link_checks,      # free-text bodies are not scanned for links/emails
+}
+GUARD_DEFENSES = ("mcp_guard", "mcp_guard_taint", *CONFIRM_USERS, *ABLATIONS)
+DEFENSES = ["none", *GUARD_DEFENSES, "spotlighting", "repeat_user_prompt", "tool_filter"]
+
+
+def policy_for(defense: str, policy_path=DEFAULT_POLICY_PATH) -> Policy:
+    """The policy a guard defense uses: the YAML policy, changed for taint mode or an ablation."""
+    policy = Policy.from_yaml(policy_path)
+    if defense == "mcp_guard_taint":
+        policy = policy.with_mode("taint")
+    if defense in ABLATIONS:
+        policy = ABLATIONS[defense](policy)
+    return policy
 
 
 def build_pipeline(llm: OpenAILLM | BasePipelineElement, name: str, defense: str = "none",
@@ -99,11 +115,8 @@ def build_pipeline(llm: OpenAILLM | BasePipelineElement, name: str, defense: str
     sys_msg = load_system_message(None)
     guard = None
 
-    if defense in ("mcp_guard", "mcp_guard_taint", *CONFIRM_USERS):
-        policy = Policy.from_yaml(policy_path)
-        if defense == "mcp_guard_taint":
-            policy = policy.with_mode("taint")
-        guard = Guard(policy, confirm_fn=CONFIRM_USERS.get(defense))
+    if defense in GUARD_DEFENSES:
+        guard = Guard(policy_for(defense, policy_path), confirm_fn=CONFIRM_USERS.get(defense))
         loop = ToolsExecutionLoop([GuardedToolsExecutor(guard), llm])
         elements = [SystemMessage(sys_msg), InitQuery(), GuardSessionStart(guard), llm, loop]
     elif defense == "none":
