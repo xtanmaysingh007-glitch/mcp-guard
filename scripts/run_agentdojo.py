@@ -9,6 +9,7 @@ Examples (PowerShell, from the project folder, venv active):
   python scripts/run_agentdojo.py --provider stub   --suite workspace --n-user 2 --n-inj 2   # offline smoke test
   python scripts/run_agentdojo.py --provider ollama --suite banking --defense none
   python scripts/run_agentdojo.py --provider ollama --suite banking --defense mcp_guard
+  python scripts/run_agentdojo.py --provider ollama --suite slack --defense mcp_guard --no-attack   # clean utility only
 Defenses: none, mcp_guard, mcp_guard_taint, mcp_guard_confirm_{no,yes,oracle}, spotlighting, repeat_user_prompt, tool_filter
 """
 import argparse
@@ -145,9 +146,12 @@ def main():
     ap.add_argument("--n-user", type=int, default=None, help="only first N user tasks (saves API quota)")
     ap.add_argument("--n-inj", type=int, default=None, help="only first N injection tasks")
     ap.add_argument("--skip-clean", action="store_true", help="skip the no-attack utility run")
+    ap.add_argument("--no-attack", action="store_true", help="only the clean utility run (no injection tasks)")
     ap.add_argument("--rerun", action="store_true", help="ignore cached logs")
     ap.add_argument("--rep", type=int, default=1, help="repeat number; rep 2+ logs to runs/<defense>/rep<N> so it doesn't reuse the cache")
     args = ap.parse_args()
+    if args.no_attack and args.skip_clean:
+        ap.error("--no-attack and --skip-clean together would run nothing")
 
     llm, name = build_llm(args.provider, args.model)
     pipeline, guard = build_pipeline(llm, name, args.defense)
@@ -166,24 +170,33 @@ def main():
                 pipeline, suite, logdir, args.rerun, user_tasks=user_tasks, benchmark_version=BENCH_VERSION
             )
             out["utility_no_attack"] = rate(clean["utility_results"])
+            # per task, so two defenses can be compared on the same tasks (keys are (user_task, ""))
+            out["utility_no_attack_by_task"] = {k[0]: bool(v) for k, v in clean["utility_results"].items()}
             if guard is not None:
                 # Counts only tasks that actually ran in THIS process (cached tasks are skipped by AgentDojo).
                 out["guard_no_attack"] = guard.stats()
                 guard.reset_stats()
 
-        attack = load_attack(args.attack, suite, pipeline)
-        res = benchmark_suite_with_injections(
-            pipeline, suite, attack, logdir, args.rerun,
-            user_tasks=user_tasks, injection_tasks=inj_tasks, verbose=False, benchmark_version=BENCH_VERSION,
-        )
-    out["utility_under_attack"] = rate(res["utility_results"])
-    # AgentDojo convention: security_results[...] is True when the ATTACKER's goal was achieved.
-    out["attack_success_rate"] = rate(res["security_results"])
-    out["n_pairs"] = len(res["security_results"])
-    if guard is not None:
-        out["guard_under_attack"] = guard.stats()
+        if not args.no_attack:
+            attack = load_attack(args.attack, suite, pipeline)
+            res = benchmark_suite_with_injections(
+                pipeline, suite, attack, logdir, args.rerun,
+                user_tasks=user_tasks, injection_tasks=inj_tasks, verbose=False, benchmark_version=BENCH_VERSION,
+            )
+    if not args.no_attack:
+        out["utility_under_attack"] = rate(res["utility_results"])
+        # AgentDojo convention: security_results[...] is True when the ATTACKER's goal was achieved.
+        out["attack_success_rate"] = rate(res["security_results"])
+        out["n_pairs"] = len(res["security_results"])
+        if guard is not None:
+            out["guard_under_attack"] = guard.stats()
+    else:
+        out["attack"] = None
+        out["injection_tasks"] = []
 
-    summary = logdir / f"summary_{name}_{args.suite}_{args.attack}_{args.defense}.json"
+    # clean-only runs get their own file name, so they never overwrite an attacked run's summary
+    attack_label = "no_attack" if args.no_attack else args.attack
+    summary = logdir / f"summary_{name}_{args.suite}_{attack_label}_{args.defense}.json"
     summary.write_text(json.dumps(out, indent=2))
     print(json.dumps(out, indent=2))
     print(f"\nSaved {summary}")
