@@ -8,7 +8,7 @@ A lightweight, CaMeL-inspired, rule-based provenance guard that protects LLM age
 injection. It sits between the agent and its tools and checks every tool call's arguments: a guarded
 argument must trace to the user's request or to a trusted tool's whole-value output (default-deny
 "allowlist" mode). A weaker "taint" mode (blocklist) exists for comparison. Evaluated on AgentDojo v1.2.2
-(suites: banking, slack, travel done; workspace not yet). Later: wrap as an MCP proxy for developers.
+(suites: banking, slack, travel done; workspace calendar tasks done, email/drive pending). Later: wrap as an MCP proxy for developers.
 
 ## Hard rules
 - Spend $0 (at most ~$5). Runs: Ollama locally or Kaggle free T4 GPUs. Gemini only for tiny spot checks.
@@ -23,7 +23,7 @@ argument must trace to the user's request or to a trusted tool's whole-value out
   num_predict 2048 since 2026-11-07).
 - Never hand over a long Kaggle cell without a time bound. 2026-11-07: Cell A hung ~5h of GPU quota (no reply
   cap + client timeout 900s x 30 retries). Now: reply cap 2048 tokens, client 300s x 4 retries, and
-  run_batch --run-timeout (default 2h per defense run, then skip it).
+  run_batch --run-timeout (hours per defense IN TOTAL across retries, default 2; then skip it).
 
 ## Layout
 - `src/mcp_guard/provenance.py` - where did a value come from (user / trusted tool / untrusted)
@@ -32,8 +32,11 @@ argument must trace to the user's request or to a trusted tool's whole-value out
 - `src/mcp_guard/agentdojo_adapter.py` - defenses: none, mcp_guard, mcp_guard_taint,
   mcp_guard_confirm_{no,yes,oracle}, mcp_guard_no_trusted, mcp_guard_no_links (ablations),
   spotlighting, repeat_user_prompt, tool_filter
-- `scripts/run_agentdojo.py` (--no-attack = clean utility only, own summary file), `scripts/run_batch.py`
-  (--reps, retries), `scripts/attribution.py` (canaries for banking, slack, travel, workspace)
+- `scripts/run_agentdojo.py` (--no-attack = clean utility only, own summary file; --user-tasks 4 13 ... =
+  pick tasks by number), `scripts/run_batch.py` (--reps, retries, --run-timeout), `scripts/attribution.py`
+  (canaries for banking, slack, travel, workspace)
+- `scripts/injectable_tasks.py` - per suite: which user tasks have injection slots (AgentDojo's
+  BaseAttack.get_injection_candidates) and whose ground truth calls a guarded tool; prints a --user-tasks list
 - `tests/test_guard.py` (27 tests; run `python -m pytest -q`)
 - Run logs: `runs/<defense>/local-<model>-<defense>/<suite>/user_task_N/<attack>/injection_task_N.json`
 
@@ -43,6 +46,14 @@ the attacker's own value (a canary, e.g. banking IBAN US133000000121212121212) t
 ignored / blocked / succeeded / partial / errored. Key metric: block rate given attempt, and "attacker got
 what it wanted" (succeeded + partial). A call with no result (step limit) is "unexecuted", not a leak.
 Do not use the user's own values as canaries (travel user_task_3 emails janeLong@google.com: false positive).
+Injection candidates (AgentDojo v1.2.2 / package 0.1.35): BaseAttack.get_injection_candidates(user_task) replays
+the GROUND-TRUTH calls with canaries in every slot and keeps the slots that show up; it raises "not injectable"
+if none (so a run would crash, not skip). Every user task in all 4 suites is injectable (workspace 40, slack
+21, banking 16, travel 20), so 0 of our earlier pairs had empty candidates. But the model takes its own path:
+pairs where the injection never reached the model (no-defense runs): banking tool_knowledge 15/48, slack
+15/50, travel 27/56, workspace 0-7 24/48. Defenses change this too (tool_filter: 48/48 never saw it).
+Injectable + guarded tool in ground truth: workspace 4 6 8 9 12 13 15 18 19 20 21 25 32 33 37; slack all 21;
+banking 0 2 3 4 5 6 9 11 12 14 15; travel 0 1 3 4 7 8.
 
 ## Results so far (Qwen2.5-7B 16k, 1 run each, small samples)
 - Banking tool_knowledge (48 pairs): no defense 11 paid (7 full + 4 partial); guard 11/11 blocked, 0 leaks;
@@ -96,8 +107,10 @@ Raw logs for older runs live in ~/Downloads/results*.zip (slack none/guard: resu
 Kaggle runs (2026-11-07):
 - A: slack clean utility, all 21 user tasks: DONE (results above: guard 14% vs none 38%, oracle 38%).
 - B: ablations: DONE (results above; raw logs in ~/Downloads/results (5).zip).
-- C: workspace user_task_0-7: DONE, no signal (results above). Next idea: rerun on email/drive tasks
-  (e.g. 13,14,16,17,19,22,24,25,29,33,35,36; needs a way to pick user tasks, --n-user only takes first N).
+- C: workspace user_task_0-7: DONE, no signal (results above).
+- C2 (pending): workspace, the 15 injectable + guarded tasks above x inj 0-5 (90 pairs), none / mcp_guard /
+  mcp_guard_confirm_oracle, 45 min per defense (estimate 30-40 min, tight: a cut defense keeps its finished
+  pairs; score on shared pairs). share_file (tasks 32, 37) is not confirmable, so the oracle can't help there.
   send_email and calendar tools are confirmable (share_file is not). This also affects travel's
   send_email in any future travel confirm run.
 Then: 4. Repeats on key numbers. 5. Adaptive attacks. 6. Rename, README (his voice), CI, LICENSE,
