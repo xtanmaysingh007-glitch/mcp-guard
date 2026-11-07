@@ -19,7 +19,11 @@ argument must trace to the user's request or to a trusted tool's whole-value out
 - Be honest about limitations. The README must be in Tanmay's own voice. He wants to understand every part
   (he will ask for a full walkthrough after the project is done), so keep code simple and well commented.
 - Always pass `--model qwen2.5-7b-16k` explicitly. `.env` OLLAMA_MODEL overrides the runner's default.
-  Custom model: `ollama create qwen2.5-7b-16k -f Modelfile.qwen7b` (base qwen2.5:7b, ctx 16384, temp 0).
+  Custom model: `ollama create qwen2.5-7b-16k -f Modelfile.qwen7b` (base qwen2.5:7b, ctx 16384, temp 0,
+  num_predict 2048 since 2026-11-07).
+- Never hand over a long Kaggle cell without a time bound. 2026-11-07: Cell A hung ~5h of GPU quota (no reply
+  cap + client timeout 900s x 30 retries). Now: reply cap 2048 tokens, client 300s x 4 retries, and
+  run_batch --run-timeout (default 2h per defense run, then skip it).
 
 ## Layout
 - `src/mcp_guard/provenance.py` - where did a value come from (user / trusted tool / untrusted)

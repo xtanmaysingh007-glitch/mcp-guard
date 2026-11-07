@@ -120,8 +120,11 @@ def build_llm(provider: str, ollama_model: str | None = None):
         client = openai.OpenAI(
             api_key="ollama",
             base_url=os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434/v1"),
-            timeout=900,
-            max_retries=30,  # ~4 min of Ollama downtime tolerated before giving up (backoff caps at 8s)
+            # A call that hangs is retried as-is, and at temperature 0 it hangs the same way again, so keep
+            # timeout x retries small: worst case ~25 min, then the run crashes and run_batch resumes it.
+            # (Ollama being briefly down is covered by run_batch's own retries, not by these.)
+            timeout=300,
+            max_retries=4,
         )
         preflight_ollama(client, model)
         llm = OpenAILLM(client, model)

@@ -25,6 +25,8 @@ def main():
     ap.add_argument("--reps", type=int, default=1, help="run each defense this many times")
     ap.add_argument("--max-attempts", type=int, default=6)
     ap.add_argument("--wait", type=int, default=60, help="seconds to wait before retrying a failed run")
+    ap.add_argument("--run-timeout", type=float, default=2.0,
+                    help="hours one defense run may take before it is killed (stops a stuck run eating GPU quota)")
     args, extra = ap.parse_known_args()
 
     status = {}
@@ -33,9 +35,17 @@ def main():
         key = f"{d} rep{rep}"
         for attempt in range(1, args.max_attempts + 1):
             print(f"\n=== {args.suite} / {key} (attempt {attempt}/{args.max_attempts}) ===", flush=True)
-            rc = subprocess.call([sys.executable, str(HERE / "run_agentdojo.py"), "--provider", args.provider,
-                                  "--suite", args.suite, "--defense", d, "--rep", str(rep),
-                                  *(["--model", args.model] if args.model else []), *extra])
+            try:
+                rc = subprocess.call([sys.executable, str(HERE / "run_agentdojo.py"), "--provider", args.provider,
+                                      "--suite", args.suite, "--defense", d, "--rep", str(rep),
+                                      *(["--model", args.model] if args.model else []), *extra],
+                                     timeout=args.run_timeout * 3600)
+            except subprocess.TimeoutExpired:
+                # subprocess.call kills the child on timeout. A stuck run would just get stuck again,
+                # so give up on this defense instead of retrying, and move on to the next one.
+                print(f"run passed {args.run_timeout}h and was killed; skipping {key}", flush=True)
+                status[key] = "TIMED OUT"
+                break
             if rc == 0:
                 status[key] = "done"
                 break
