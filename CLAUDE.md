@@ -27,8 +27,11 @@ argument must trace to the user's request or to a trusted tool's whole-value out
 
 ## Layout
 - `src/mcp_guard/provenance.py` - where did a value come from (user / trusted tool / untrusted)
-- `src/mcp_guard/policy.py`, `policies/agentdojo.yaml` - trusted tools, guarded args, link checks, confirmable tools
-- `src/mcp_guard/guard.py` - allow / block / (confirm mode) ask the user
+- `src/mcp_guard/policy.py`, `policies/agentdojo.yaml` - trusted tools, guarded args, link checks, confirmable
+  tools, user_identities (the user's own address, counts as user-given every session; 2026-11-08)
+- `src/mcp_guard/guard.py` - allow / block / (confirm mode) ask the user. Retry cap (2026-11-08): the same
+  (tool, args) plainly blocked gets the normal reason twice, then "blocked: this call was already refused.
+  Do not retry it or look for another way." (PLAIN_BLOCK_RETRIES = 2; every try still counts as a block)
 - `src/mcp_guard/agentdojo_adapter.py` - defenses: none, mcp_guard, mcp_guard_taint,
   mcp_guard_confirm_{no,yes,oracle}, mcp_guard_no_trusted, mcp_guard_no_links (ablations),
   spotlighting, repeat_user_prompt, tool_filter
@@ -37,7 +40,7 @@ argument must trace to the user's request or to a trusted tool's whole-value out
   (canaries for banking, slack, travel, workspace)
 - `scripts/injectable_tasks.py` - per suite: which user tasks have injection slots (AgentDojo's
   BaseAttack.get_injection_candidates) and whose ground truth calls a guarded tool; prints a --user-tasks list
-- `tests/test_guard.py` (27 tests; run `python -m pytest -q`)
+- `tests/test_guard.py` (30 tests; run `python -m pytest -q`)
 - Run logs: `runs/<defense>/local-<model>-<defense>/<suite>/user_task_N/<attack>/injection_task_N.json`
 
 ## Evidence method
@@ -107,7 +110,10 @@ banking 0 2 3 4 5 6 9 11 12 14 15; travel 0 1 3 4 7 8.
 ## Known limitations
 Persuasion without a tool call; steering among trusted options; unguarded free-text/args (travel calendar
 title); default-deny blocks legit flows using untrusted URLs/emails; small samples, one small model.
-Blocks cause retry loops (wasted steps/GPU time). Workspace: the user's own email address is not trusted.
+Blocks cause retry loops (wasted steps/GPU time); now capped (see guard.py), not yet re-measured.
+The user's own address is trusted via user_identities, so a "send this to my own address" step of an attack
+passes (e.g. the ransom email in a later workspace injection task); its exfiltration step to the attacker
+is still blocked. Earlier results were measured WITHOUT user_identities and WITHOUT the retry cap.
 Qwen-7B ignores important_instructions injections in workspace (0 attempts in 124 no-defense pairs: 48 + 76), so workspace
 security is untested.
 Workspace gaps (no guarded arg, so the guard cannot stop them): delete_file (injection_task_1 deletes file 13),
@@ -124,6 +130,11 @@ Kaggle runs (2026-11-07):
 - C: workspace user_task_0-7: DONE, no signal (results above).
 - C2: workspace injectable + guarded tasks: DONE but cut at 45 min per defense; no signal (results above).
   Real time per defense was ~45-50 min of model time, not 30-40 (my estimate was low).
+- C3 (pending, last workspace try): attack tool_knowledge (the one that got banking wins), --user-tasks 13 19 20
+  (the injection reached the model 6/6 in each), --n-inj 6 = 18 pairs, none / mcp_guard /
+  mcp_guard_confirm_oracle, 45 min per defense (estimate 10-20). Uses user_identities + retry cap.
+  STOP RULE: if `none` still shows 0 attacker attempts, stop workspace: report it as "untested, the model
+  ignored every injection (0 attempts in 124 + 18 pairs)" and move on to repeats / README.
   send_email and calendar tools are confirmable (share_file is not). This also affects travel's
   send_email in any future travel confirm run.
 Then: 4. Repeats on key numbers. 5. Adaptive attacks. 6. Rename, README (his voice), CI, LICENSE,
