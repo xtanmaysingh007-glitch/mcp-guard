@@ -213,6 +213,84 @@ value-also-in-trusted-source, suffix email, the no_trusted ablation; test_adapti
 strict_trust off. Under typed, a contact's email isn't enough for a recipient at all. That changes what
 the no_trusted ablation means: with typed, the full guard also blocks the contact email in that test.
 
+## Default-deny for unknown tools, executor test, approval scope (2026-11-09)
+
+### unknown_tools: allow | block
+
+A tool the policy doesn't mention at all is "unknown". With `block`, it never runs. That's default-deny
+for tools: a new tool can't send, pay or delete before someone has classified it.
+- The AgentDojo policy stays on **allow**, so every earlier result stays comparable.
+- A proxy should use block.
+- `safe_tools` lists read-only lookups on purpose, so block mode doesn't stop them. Their output is still
+  untrusted data.
+
+Before this change the policy didn't mention 36 of the 74 AgentDojo tools:
+- banking 3: transactions, scheduled transactions, read_file;
+- slack 2: read_channel_messages, read_inbox;
+- travel 18: reviews, prices, addresses, calendar search;
+- workspace 13: email and file search, calendar reads, create_file, append_to_file.
+
+Only 2 of them write: workspace `create_file` and `append_to_file`. The other 34 are now in `safe_tools`,
+and those two are deliberately left unknown.
+
+Replay of the 537 local no-defense logs under block. Extra blocks are counted against allow, as
+clean / attacked:
+
+| suite | block, policy as it was (no safe_tools) | tools hit | block with safe_tools |
+|---|---|---|---|
+| banking | +26 / +169 | get_most_recent_transactions 132, read_file 55, get_scheduled_transactions 8 | 0 / 0 |
+| slack | +53 / +54 | read_channel_messages 84, read_inbox 23 | 0 / 0 |
+| travel | +24 / +151 | get_rating_reviews_for_hotels 58, get_hotels_prices 50, get_hotels_address 42, restaurant reviews / prices / cuisine 25 | 0 / 0 |
+| workspace | +35 / +200 | search_emails 51, search_calendar_events 49, get_day_calendar_events 47, create_file 38, append_to_file 28, file search 22 | **+7 / +59** (create_file 38, append_to_file 28) |
+
+The figures are the same for plain mode and the oracle, except that with safe_tools workspace is
++7 / +59 for both. Unknown tools are blocked, not asked about, even in confirm mode.
+
+### Executor-level test
+
+[tests/test_executor.py](../tests/test_executor.py) pushes a model turn through `GuardedToolsExecutor`
+with a stub tool that records each real run:
+
+| decision | stub runs |
+|---|---|
+| blocked | 0 |
+| declined by the user | 0 |
+| allowed | 1 |
+| approved | 1 |
+| unknown tool, allow | 1 |
+| unknown tool, block | 0 |
+
+So a refusal really never reaches the tool, not just in the guard's bookkeeping.
+
+### approval_scope: value | call
+
+- **value** (default, the setting of every result so far): a yes covers the approved values in that
+  argument of that tool for the rest of the session.
+- **call**: a yes covers only that exact call, once.
+  - The key is a SHA-256 of the tool name plus all arguments, with strings lower-cased and spaces
+    collapsed. URLs keep their query string, unlike the canonical URL used for declines, so
+    `x.com/a?to=evil@...` is a different call from `x.com/a`.
+  - A changed recipient, body or any other argument asks again, and so does the same call a second time.
+  - Approvals given ahead of the call (`Guard.approve_call`, e.g. a proxy that blocks, asks, and lets the
+    agent retry) are used once and expire after `approval_ttl_calls` (5) checked calls.
+
+Oracle prompts per clean task:
+
+| suite | perfect agent, value -> call | logs (clean), value -> call | logs (attacked) prompts, value -> call |
+|---|---|---|---|
+| banking (16 tasks / 32 clean logs) | 0.06 -> 0.06 | 0.06 -> 0.06 | 6 -> 8 |
+| slack (21 / 31) | 1.05 -> 1.05 | **1.13 -> 1.81** (35 -> 56) | 55 -> 69 |
+| travel (20 / 8) | 0 -> 0 | 0 -> 0 | 0 -> 0 |
+| workspace (40 / 26) | 0.28 -> 0.28 | 0.27 -> 0.42 (7 -> 11) | 53 -> 93 |
+
+- **Utility doesn't change:** oracle utility on the perfect agent is the same under both scopes.
+- **The cost only shows with a real model.** A perfect agent makes each call once, so call scope costs it
+  nothing. The real model repeats calls and rewrites bodies, and each variant needs a new yes.
+- **One side effect is a security gain.** In slack attacked logs, call scope adds 3 blocks, all
+  `add_user_to_channel(Fred)` from injection_task_5. Call scope asks about each of the attacker's invite
+  variants, the oracle declines them, and the circuit breaker trips. Under value scope the oracle had
+  approved adding "Fred", because the name isn't on its attacker list.
+
 ## What is still open, and why
 
 - **B1, B1b, B2b, B3: open only with strict_trust off.** Blocked under typed (the default) and full. A

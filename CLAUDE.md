@@ -40,6 +40,11 @@ argument must trace to the user's request or to a trusted tool's whole-value out
   the retry cap match canonical URLs (no scheme/www/query/trailing slash, lower case); circuit breaker
   MAX_DECLINES = 2 (after 2 declines in a session: stop asking, block every untraceable value); values the
   agent wrote into non-trusted tools are not trusted when a trusted tool echoes them back.
+- policy (2026-11-09): unknown_tools allow|block (AgentDojo yaml: allow, so old results stay comparable; a
+  proxy should use block) + safe_tools (34 read-only AgentDojo tools; create_file / append_to_file left
+  unknown on purpose). approval_scope value|call (yaml: value = every result so far); call = a yes covers one
+  exact call once (SHA-256 of tool + call_canonical args, URL query kept); Guard.approve_call(...) stores an
+  approval ahead of the call, one use, expires after approval_ttl_calls (5) checked calls.
 - `src/mcp_guard/provenance.py` normalize(): zero-width, NFKC, defang (hxxp, [.], [at], "x at y dot com"),
   percent-decoding, split-line joining, bare domains (common TLDs only), loose IBANs, base64. Only ADDS atoms
   (raw atoms are always kept). URL atoms compare without scheme / www / trailing slash (path+query kept).
@@ -53,12 +58,14 @@ argument must trace to the user's request or to a trusted tool's whole-value out
   BaseAttack.get_injection_candidates) and whose ground truth calls a guarded tool; prints a --user-tasks list
 - `scripts/replay_guard.py <log.json> <defense>` - replay one logged run through the CURRENT guard, no model
   (e.g. "would this leak be stopped now?"). Forces the logged calls, so it can't show what the model does next.
-- `tests/test_guard.py` (44 tests; run `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python -m pytest -q`: since 2026-11-08
+- `tests/test_executor.py` - through GuardedToolsExecutor with a stub tool: blocked / declined never run it,
+  allowed / approved run it exactly once, unknown tool runs only under allow
+- `tests/test_guard.py` (55 tests; run `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python -m pytest -q`: since 2026-11-08
   Windows Application Control blocks uuid_utils' DLL, which the auto-loaded langsmith pytest plugin imports;
   our tests don't need the plugin)
 - `tests/test_adaptive.py` + `docs/adaptive_attacks.md` - adaptive red-team traces, no model (first pass 41,
   44 cases; open bypasses are xfail(strict=True); B cases run in default (xfail) and strict mode;
-  whole suite now 99 pass + 6 xfail; B cases run under off (xfail), typed and full)
+  whole suite now 116 pass + 6 xfail; B cases run under off (xfail), typed and full)
 - Run logs: `runs/<defense>/local-<model>-<defense>/<suite>/user_task_N/<attack>/injection_task_N.json`
 
 ## Evidence method
@@ -126,6 +133,12 @@ banking 0 2 3 4 5 6 9 11 12 14 15; travel 0 1 3 4 7 8.
 - Banking guard allowlist, earlier runs: 16k important_instructions 3/3 blocked vs none 10/10 success.
 
 ## Known limitations
+unknown_tools / approval_scope (2026-11-09, no model, docs/adaptive_attacks.md): block with safe_tools adds
+only workspace create_file / append_to_file blocks (+7 clean / +59 attacked of the 537 logs); the policy as it
+was (no safe_tools) would have blocked 593 extra calls (all read-only lookups). approval_scope call: same
+perfect-agent prompts and utility, but on real logs oracle prompts per clean task rise slack 1.13 -> 1.81,
+workspace 0.27 -> 0.42 (the model repeats / rewrites calls); 3 more attacker add_user_to_channel(Fred) blocks
+(circuit breaker). Unknown tools are blocked even in confirm mode (not asked).
 Adaptive attacks (2026-11-08, docs/adaptive_attacks.md): first pass 27 of 41 bypassed; after the fixes
 (commits 2dbdf8c, 2148111, 6f74f26, then typed default 2efd8b6) 2 of 44 open (C2a, F K=1):
 - B1/B1b/B2b/B3 weak trust: FIXED by strict_trust "typed", the DEFAULT since 2026-11-09 (commit 2efd8b6).
