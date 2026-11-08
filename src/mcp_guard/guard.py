@@ -6,7 +6,7 @@ import json
 from typing import Any, Callable
 
 from .policy import Policy
-from .provenance import Provenance
+from .provenance import Provenance, iter_strings, primary_atom
 
 # A plainly blocked call gets the normal "not traceable" reason this many times; any further identical
 # try gets "already refused, stop". (Confirm mode already stops after the user's first "no".)
@@ -28,18 +28,24 @@ class Guard:
         """confirm_fn(tool, args, offending_atoms) -> bool. None = never ask, just block (default)."""
         self.policy = policy
         self.confirm_fn = confirm_fn
-        self.refused: dict[str, int] = {}   # call fingerprint -> times the USER declined it this session
-        self.blocked_times: dict[str, int] = {}  # call fingerprint -> times plainly blocked this session
         self.prov = Provenance()
         self.decisions: list[Decision] = []      # current session
         self.all_decisions: list[Decision] = []  # across sessions (for stats)
         self.n_sessions = 0
+        self._reset_session_state()
+
+    def _reset_session_state(self) -> None:
+        self.refused: dict[str, int] = {}        # call key -> times the USER declined it this session
+        self.blocked_times: dict[str, int] = {}  # call key -> times plainly blocked this session
+        # Approvals are scoped: a yes covers that exact value in that argument of that tool, nothing more.
+        # (They used to become "user-given" everywhere, so approving a link also approved an IBAN inside it.)
+        self.approved: set[tuple[str, str, str]] = set()  # (tool, arg, atom)
+        self.approved_calls: set[str] = set()             # call keys the user said yes to
 
     def start_session(self, user_query: str) -> None:
         self.prov = Provenance()
         self.decisions = []
-        self.refused = {}
-        self.blocked_times = {}
+        self._reset_session_state()
         self.prov.add_user(user_query)
         # The user's own identity (e.g. their email address) is something they "said" in every session,
         # even when the request doesn't spell it out. Exact match only, like any typed value.
@@ -53,7 +59,13 @@ class Guard:
         else:
             self.prov.add_untrusted(output)
 
-    def check_call(self, tool: str, args: dict[str, Any]) -> Decision:
+    @staticmethod
+    def _call_key(tool: str, args: dict[str, Any]) -> str:
+        return tool + json.dumps(args, sort_keys=True, default=str)
+
+    def _untraceable(self, tool: str, args: dict[str, Any]) -> dict[str, list[str]]:
+        """Guarded argument -> its atoms that trace to neither the user, a trusted tool, nor an approval
+        given for this same tool and argument."""
         bad: dict[str, list[str]] = {}
         checks = [(a, False) for a in self.policy.forbid_tainted.get(tool, [])]
         checks += [(a, True) for a in self.policy.check_links_in.get(tool, [])]  # free text: links only
@@ -61,21 +73,36 @@ class Guard:
             if arg in args:
                 atoms = (self.prov.unverified_atoms(args[arg], typed_only) if self.policy.mode == "allowlist"
                          else self.prov.tainted_atoms(args[arg], typed_only))
+                atoms = [a for a in atoms if (tool, arg, a) not in self.approved]
                 if atoms:
                     bad[arg] = atoms
+        return bad
+
+    def _remember_approval(self, tool: str, args: dict[str, Any], bad: dict[str, list[str]]) -> None:
+        """Approve only the values the user saw as a whole (a recipient, a URL). An email or IBAN hidden
+        INSIDE an approved URL (e.g. in its query string) is not approved."""
+        for arg, atoms in bad.items():
+            shown = {primary_atom(s) for s in iter_strings(args[arg])}
+            self.approved |= {(tool, arg, a) for a in atoms if a in shown}
+
+    def check_call(self, tool: str, args: dict[str, Any]) -> Decision:
+        bad = self._untraceable(tool, args)
         # always_confirm tools (e.g. delete_file) have no argument we can trace: deleting file "13" looks the
         # same whether the user or an injection asked for it. So they always go to the user, or are blocked.
         always = tool in self.policy.always_confirm
-        if bad or always:
+        key = self._call_key(tool, args)
+        if (bad or always) and key in self.approved_calls:
+            d = Decision(True, tool, "approved by user (same call as before)", bad)
+        elif bad or always:
             names = ", ".join(f"{a}={v}" for a, v in bad.items())
-            key = tool + json.dumps(args, sort_keys=True, default=str)
             if self.refused.get(key, 0) >= 1 and self.confirm_fn is not None:
                 # already refused once: do not ask again, and tell the model to stop trying
                 d = Decision(False, tool, "blocked: the user already declined this exact call. Do not retry it "
                              "or look for another way to do it.", bad)
             elif self.confirm_fn is not None and (always or tool in self.policy.confirmable):
                 if self.confirm_fn(tool, args, bad):
-                    self.prov.add_approved([a for v in bad.values() for a in v])
+                    self._remember_approval(tool, args, bad)
+                    self.approved_calls.add(key)
                     d = Decision(True, tool, "approved by user", bad, asked=True, approved=True)
                 else:
                     self.refused[key] = self.refused.get(key, 0) + 1
@@ -96,6 +123,10 @@ class Guard:
                                  f"({names}). Only use values the user gave you or that come from trusted sources.", bad)
         else:
             d = Decision(True, tool)
+        if d.allowed and tool not in self.policy.trusted_tools:
+            # remember what the agent wrote, so a trusted tool echoing it back later can't launder it
+            for value in args.values():
+                self.prov.note_written(value)
         self.decisions.append(d)
         self.all_decisions.append(d)
         return d

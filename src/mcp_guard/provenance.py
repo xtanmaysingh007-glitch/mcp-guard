@@ -6,6 +6,10 @@ Sources per session:
               text. An attacker who smuggles text into a trusted source (e.g. a Slack channel NAME
               containing "visit www.evil.com") cannot make the URL inside it trusted.
   untrusted - outputs of every other tool (emails, files, web pages, messages, reviews ...)
+  written   - untraceable values the AGENT put into calls to non-trusted tools. If a trusted tool later
+              returns one, it is not trusted. Stops write-then-read laundering: write the attacker's IBAN
+              into your own profile (update_user_info), read it back from trusted get_user_info, pay it.
+Approvals (confirm mode) are not stored here: the guard keeps them per (tool, argument, value).
 
 Atoms are what we compare:
   typed atoms  - emails, URLs, IBANs. Must match EXACTLY (set membership), so an attacker cannot
@@ -80,6 +84,19 @@ def extract_atoms(value: Any, typed_only: bool = False) -> list[tuple[str, str]]
     return atoms
 
 
+def primary_atom(s: str) -> str | None:
+    """The atom that IS this whole string (a recipient, a URL), or None. For a URL whose query string
+    holds an email, the URL is the primary atom and the email is only inside it."""
+    flat = _flat(s)
+    found = typed_atoms(s.strip())
+    if not found:
+        return flat if len(flat) >= MIN_WHOLE_VALUE_LEN else None
+    for a in found:
+        if a in (flat, flat.replace(" ", ""), _clean_url(flat)):
+            return a
+    return None
+
+
 @dataclass
 class _Corpus:
     typed: set[str] = field(default_factory=set)
@@ -124,11 +141,15 @@ class _Values:
     whole: set[str] = field(default_factory=set)
     typed: set[str] = field(default_factory=set)
 
-    def add(self, text: str) -> None:
+    def add(self, text: str, distrust: set[tuple[str, str]] = frozenset()) -> None:
+        """distrust: (kind, atom) pairs the agent itself wrote from untraceable data. A leaf holding one
+        of them is skipped (not trusted): the attacker could have put it there through the agent."""
         for leaf in leaf_values(text):
             flat = _flat(leaf)
-            self.whole.add(flat)
             found = typed_atoms(leaf)
+            if ("whole", flat) in distrust or any(("typed", a) in distrust for a in found):
+                continue
+            self.whole.add(flat)
             # Only trust a typed atom if it IS the whole value (an email field) or the value is exactly
             # "Name <atom>" (common contact format) - never free text that merely contains it.
             if len(found) == 1:
@@ -145,19 +166,19 @@ class Provenance:
     user: _Corpus = field(default_factory=_Corpus)
     tool_values: _Values = field(default_factory=_Values)
     untrusted: _Corpus = field(default_factory=_Corpus)
+    written: set[tuple[str, str]] = field(default_factory=set)  # (kind, atom) the agent wrote, untraceable
 
     def add_user(self, text: str) -> None:
         self.user.add(text)
 
-    def add_approved(self, atoms: list[str]) -> None:
-        """The user said yes to these exact values (confirm mode): from now on they count as user-given."""
-        for a in atoms:
-            self.user.typed.add(a)
-            self.user.text += "\n" + a
-
     def add_trusted(self, text: str) -> None:
-        """Output of a trusted tool: only its whole values become trusted."""
-        self.tool_values.add(text)
+        """Output of a trusted tool: only its whole values become trusted (minus what the agent wrote)."""
+        self.tool_values.add(text, self.written)
+
+    def note_written(self, value: Any) -> None:
+        """The agent is calling a non-trusted tool with this argument value: remember its untraceable
+        atoms, so a trusted tool that later echoes them back does not make them trusted."""
+        self.written |= set(self.unverified_pairs(value))
 
     def add_untrusted(self, text: str) -> None:
         self.untrusted.add(text)
@@ -165,8 +186,11 @@ class Provenance:
     def is_trusted(self, kind: str, atom: str) -> bool:
         return self.user.contains(kind, atom) or self.tool_values.contains(kind, atom)
 
+    def unverified_pairs(self, value: Any, typed_only: bool = False) -> list[tuple[str, str]]:
+        return [(k, a) for k, a in extract_atoms(value, typed_only) if not self.is_trusted(k, a)]
+
     def unverified_atoms(self, value: Any, typed_only: bool = False) -> list[str]:
-        return [a for k, a in extract_atoms(value, typed_only) if not self.is_trusted(k, a)]
+        return [a for _, a in self.unverified_pairs(value, typed_only)]
 
     def tainted_atoms(self, value: Any, typed_only: bool = False) -> list[str]:
         return [a for k, a in extract_atoms(value, typed_only)
