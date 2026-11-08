@@ -42,6 +42,8 @@ argument must trace to the user's request or to a trusted tool's whole-value out
   (canaries for banking, slack, travel, workspace)
 - `scripts/injectable_tasks.py` - per suite: which user tasks have injection slots (AgentDojo's
   BaseAttack.get_injection_candidates) and whose ground truth calls a guarded tool; prints a --user-tasks list
+- `scripts/replay_guard.py <log.json> <defense>` - replay one logged run through the CURRENT guard, no model
+  (e.g. "would this leak be stopped now?"). Forces the logged calls, so it can't show what the model does next.
 - `tests/test_guard.py` (33 tests; run `python -m pytest -q`)
 - Run logs: `runs/<defense>/local-<model>-<defense>/<suite>/user_task_N/<attack>/injection_task_N.json`
 
