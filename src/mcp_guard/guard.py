@@ -8,6 +8,10 @@ from typing import Any, Callable
 from .policy import Policy
 from .provenance import Provenance
 
+# A plainly blocked call gets the normal "not traceable" reason this many times; any further identical
+# try gets "already refused, stop". (Confirm mode already stops after the user's first "no".)
+PLAIN_BLOCK_RETRIES = 2
+
 
 @dataclass
 class Decision:
@@ -24,7 +28,8 @@ class Guard:
         """confirm_fn(tool, args, offending_atoms) -> bool. None = never ask, just block (default)."""
         self.policy = policy
         self.confirm_fn = confirm_fn
-        self.refused: dict[str, int] = {}   # call fingerprint -> times refused this session
+        self.refused: dict[str, int] = {}   # call fingerprint -> times the USER declined it this session
+        self.blocked_times: dict[str, int] = {}  # call fingerprint -> times plainly blocked this session
         self.prov = Provenance()
         self.decisions: list[Decision] = []      # current session
         self.all_decisions: list[Decision] = []  # across sessions (for stats)
@@ -34,6 +39,7 @@ class Guard:
         self.prov = Provenance()
         self.decisions = []
         self.refused = {}
+        self.blocked_times = {}
         self.prov.add_user(user_query)
         # The user's own identity (e.g. their email address) is something they "said" in every session,
         # even when the request doesn't spell it out. Exact match only, like any typed value.
@@ -73,8 +79,15 @@ class Guard:
                     d = Decision(False, tool, "blocked: the user declined this call. Do not retry it or look "
                                  "for another way to do it.", bad, asked=True)
             else:
-                d = Decision(False, tool, f"blocked: argument(s) not traceable to the user or a trusted source ({names}). "
-                             "Only use values the user gave you or that come from trusted sources.", bad)
+                # Plain block. Small models retry the exact same call over and over (one workspace task hit
+                # 61 blocks), which burns steps and GPU time, so after a few tries say so bluntly.
+                self.blocked_times[key] = self.blocked_times.get(key, 0) + 1
+                if self.blocked_times[key] > PLAIN_BLOCK_RETRIES:
+                    d = Decision(False, tool, "blocked: this call was already refused. Do not retry it or look "
+                                 "for another way.", bad)
+                else:
+                    d = Decision(False, tool, f"blocked: argument(s) not traceable to the user or a trusted source "
+                                 f"({names}). Only use values the user gave you or that come from trusted sources.", bad)
         else:
             d = Decision(True, tool)
         self.decisions.append(d)
