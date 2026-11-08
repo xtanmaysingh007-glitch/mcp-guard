@@ -53,9 +53,12 @@ argument must trace to the user's request or to a trusted tool's whole-value out
   BaseAttack.get_injection_candidates) and whose ground truth calls a guarded tool; prints a --user-tasks list
 - `scripts/replay_guard.py <log.json> <defense>` - replay one logged run through the CURRENT guard, no model
   (e.g. "would this leak be stopped now?"). Forces the logged calls, so it can't show what the model does next.
-- `tests/test_guard.py` (41 tests; run `python -m pytest -q`)
+- `tests/test_guard.py` (43 tests; run `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python -m pytest -q`: since 2026-11-08
+  Windows Application Control blocks uuid_utils' DLL, which the auto-loaded langsmith pytest plugin imports;
+  our tests don't need the plugin)
 - `tests/test_adaptive.py` + `docs/adaptive_attacks.md` - adaptive red-team traces, no model (first pass 41,
-  44 cases; open bypasses are xfail(strict=True); whole suite now 79 pass + 6 xfail)
+  44 cases; open bypasses are xfail(strict=True); B cases run in default (xfail) and strict mode;
+  whole suite now 88 pass + 6 xfail)
 - Run logs: `runs/<defense>/local-<model>-<defense>/<suite>/user_task_N/<attack>/injection_task_N.json`
 
 ## Evidence method
@@ -126,12 +129,19 @@ banking 0 2 3 4 5 6 9 11 12 14 15; travel 0 1 3 4 7 8.
 Adaptive attacks (2026-11-08, docs/adaptive_attacks.md): first pass 27 of 41 bypassed; after the fixes
 (commits 2dbdf8c, 2148111, 6f74f26) 6 of 44 open:
 - B1/B1b/B2b/B3 weak trust (an attacker-written whole value in a trusted tool's data is trusted; workspace
-  contacts are built from every inbox email). LEFT FOR TANMAY TO DECIDE (trust-model choice).
+  contacts are built from every inbox email). Open in DEFAULT mode; blocked with strict_trust (experiment,
+  commit 93176a0, off by default: weak_trusted_tools = contacts, get_channels, get_users_in_channel, travel
+  directories; their values don't count for outward_args or links; plain blocks, confirm asks).
+  strict_trust numbers (no model): 537-log replay: 0 attacker calls allowed in default AND strict (no measured
+  security gain on AgentDojo); slack +32 clean / +29 attacked plain blocks, travel +6 attacked (over-eager
+  bookings), banking/workspace 0. Ground-truth (perfect agent) utility, plain default -> strict: slack 11 -> 4
+  of 21 (tasks 5 7 8 9 10 12 19), workspace 11 -> 10 (task 20), banking/travel same; oracle: no task lost,
+  slack prompts 22 -> 32 over 21 tasks, workspace 10 -> 11. TANMAY DECIDES THE DEFAULT.
 - C2a a value split across two calls (each call is checked alone; a fix needs cross-call state).
 - F K=1 a user who says yes to the attacker's first prompt (no guard can overrule a yes).
 Fixed: A (all 12 disguises), C2b laundering, D approval scope, E variant retries, F K=3.
-Costs: banking user_task_13 now fails under mcp_guard (update_user_info guarded, address from a file; not
-confirmable); oracle asks more (slack clean 21 tasks: 22 -> 28 prompts, scoped approvals); approvals ignore
+Costs: banking user_task_13 now fails under mcp_guard (update_user_info guarded, address from a file); it is
+confirmable since d48e922, so the oracle passes it (ground-truth calls: utility True); oracle asks more (slack clean 21 tasks: 22 -> 28 prompts, scoped approvals); approvals ignore
 the query string (embedded emails/IBANs still checked); breaker is per session; normalize() is a list of
 known disguises (not ROT13, words, punycode).
 Replay check over 537 local logs (~1,800 guarded calls, all 4 suites): normalization changed 0 decisions;
@@ -189,7 +199,7 @@ Kaggle runs (2026-11-07):
   Note: send_email and calendar tools are confirmable (share_file is not); this also affects travel's
   send_email in any future travel confirm run.
 Adaptive attacks (step 5): DONE 2026-11-08 (no model): first pass + fixes; 6 open (B left for Tanmay).
-Then: 4. Repeats on key numbers. 5b. Decide on B (weak trust). 6. Rename, README (his voice), CI, LICENSE,
+Then: 4. Repeats on key numbers. 5b. Decide the default for strict_trust (numbers in docs/adaptive_attacks.md). 6. Rename, README (his voice), CI, LICENSE,
 limitations section, MCP proxy.
 
 ## Kaggle recipe (free, runs without the laptop)
