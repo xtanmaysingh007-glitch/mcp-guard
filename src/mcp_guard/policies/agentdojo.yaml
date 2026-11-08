@@ -109,7 +109,8 @@ check_links_in:
 
 # Confirm mode (only used when a confirm function is supplied): a refused call to one of these tools is
 # shown to the user instead of being blocked outright. Money / password tools are deliberately NOT here,
-# and neither is share_file (it hands out access to the user's files).
+# and neither is share_file (it hands out access to the user's files). update_user_info is: it changes only
+# the user's own profile, and the user can check the new address.
 confirmable:
   - send_email
   - create_calendar_event
@@ -120,3 +121,4 @@ confirmable:
   - add_user_to_channel
   - send_direct_message
   - send_channel_message
+  - update_user_info   # the user's own profile (banking user_task_13: new address read from a file)
