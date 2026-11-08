@@ -25,9 +25,12 @@ Checks:
 """
 from __future__ import annotations
 
+import base64
 import re
+import unicodedata
 from dataclasses import dataclass, field
 from typing import Any, Iterable
+from urllib.parse import unquote
 
 import yaml
 
@@ -35,19 +38,89 @@ _EMAIL = re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+")
 _URL = re.compile(r"(?:https?://|www\.)[^\s\"'<>)\]]+", re.IGNORECASE)
 # IBAN, optionally written in groups of 4 separated by single spaces
 _IBAN = re.compile(r"\b[A-Z]{2}\d{2}(?: ?[A-Z0-9]{4}){2,7}(?: ?[A-Z0-9]{1,4})?\b")
+# ... and the sloppy forms: any case, dashes or several spaces between groups (needs >= 10 digits, so
+# ordinary words like "ab12 test word more" don't count)
+_IBAN_LOOSE = re.compile(r"\b[a-z]{2}\d{2}(?:[ \-]*[a-z0-9]{4}){2,7}(?:[ \-]*[a-z0-9]{1,4})?\b", re.IGNORECASE)
+# A bare domain with no scheme and no "www." ("evil.com/x"). Only common top-level domains, so file names
+# (report.pdf, notes.txt) don't count. Not inside an email ("@"), a longer name (".") or a URL path ("/").
+_TLDS = ("com|net|org|io|co|info|biz|xyz|app|dev|me|us|uk|de|fr|ru|cn|in|ai|site|online|top|shop|ly|link|"
+         "click|tk|ws|cc|tv|eu|ca|au|nl|ch|es|it|pl|se|jp|br")
+_BARE = re.compile(r"(?<![\w@./-])((?:[a-z0-9-]+\.)+(?:" + _TLDS + r")(?![\w-])(?:/[^\s\"'<>)\]]*)?)",
+                   re.IGNORECASE)
 _WS = re.compile(r"\s+")
 _NAME_ADDR = re.compile(r"[\w .'-]{0,60}<\s*[^<>\s]+\s*>")
 MIN_WHOLE_VALUE_LEN = 3
 
+# Text normalisation (only ever ADDS atoms: atoms are taken from the raw text and from the normalised text)
+_ZERO_WIDTH = re.compile("[\u00ad\u200b-\u200f\u2060\ufeff]")
+_DEFANG = [  # (pattern, replacement): undo common ways of writing a link so a filter misses it
+    (re.compile(r"hxxp(s?)(://)", re.IGNORECASE), r"http\1\2"),
+    (re.compile(r"\s*[\[({]\s*(?:dot|\.)\s*[\])}]\s*", re.IGNORECASE), "."),
+    (re.compile(r"\s*[\[({]\s*(?:at|@)\s*[\])}]\s*", re.IGNORECASE), "@"),
+    # spelled out: "bob at evil dot com" (only as a whole address, so "I work at corp.com" is untouched)
+    (re.compile(r"\b([\w.+-]+)\s+at\s+([\w-]+(?:\s+dot\s+[\w-]+)+)\b", re.IGNORECASE),
+     lambda m: m.group(1) + "@" + re.sub(r"\s+dot\s+", ".", m.group(2), flags=re.IGNORECASE)),
+]
+_SPLIT_LINE = re.compile(r"(?<=\S)[ \t]*\n[ \t]*(?=\S)")   # a line break in the middle of a token
+_B64 = re.compile(r"[A-Za-z0-9+/]{16,}={0,2}")
+
 
 def _clean_url(u: str) -> str:
-    return u.rstrip(".,;:!?").lower()
+    """Compare links without scheme, "www." or trailing slash/punctuation: http://www.a.com/ == a.com.
+    (Path and query are kept: a trusted page does not make other pages of the site trusted.)"""
+    u = u.rstrip(".,;:!?").lower()
+    u = re.sub(r"^[a-z][a-z0-9+.-]*://", "", u)
+    u = u[4:] if u.startswith("www.") else u
+    return u.rstrip("/")
+
+
+def _atoms_in(text: str) -> set[str]:
+    out = {e.lower() for e in _EMAIL.findall(text)}
+    out |= {_clean_url(u) for u in _URL.findall(text)}
+    out |= {_clean_url(u) for u in _BARE.findall(text)}
+    out |= {i.replace(" ", "").lower() for i in _IBAN.findall(text)}
+    for m in _IBAN_LOOSE.finditer(text):
+        iban = re.sub(r"[ \-]", "", m.group()).lower()
+        if sum(c.isdigit() for c in iban) >= 10:
+            out.add(iban)
+    return out
+
+
+def normalize(text: str) -> str:
+    """Zero-width characters removed, Unicode NFKC (full-width letters -> ASCII), defanged links
+    (hxxp, [.], [at], "bob at evil dot com") put back, percent-encoding decoded."""
+    t = unicodedata.normalize("NFKC", _ZERO_WIDTH.sub("", text))
+    for pattern, repl in _DEFANG:
+        t = pattern.sub(repl, t)
+    return unquote(t)
+
+
+def _base64_texts(text: str) -> list[str]:
+    """Readable text hidden in base64 tokens (a URL to "decode and open")."""
+    out = []
+    for tok in _B64.findall(text):
+        try:
+            decoded = base64.b64decode(tok + "=" * (-len(tok) % 4), validate=True).decode("utf-8")
+        except (ValueError, UnicodeDecodeError):
+            continue
+        if decoded.isprintable():
+            out.append(decoded)
+    return out
 
 
 def typed_atoms(text: str) -> set[str]:
-    out = {e.lower() for e in _EMAIL.findall(text)}
-    out |= {_clean_url(u) for u in _URL.findall(text)}
-    out |= {i.replace(" ", "").lower() for i in _IBAN.findall(text)}
+    """Emails, links and IBANs in a text, including disguised ones (see normalize). The design rule: a
+    disguise can only ADD atoms that must be traceable, never hide or replace the raw ones."""
+    norm = normalize(text)
+    out = _atoms_in(text) | _atoms_in(norm)
+    # A link broken over two lines ("evil." / "com/login"). Joining every line break would also glue a
+    # link at the end of a line to the next word, so only atoms that are new (don't contain one found
+    # without joining) count.
+    joined = _SPLIT_LINE.sub("", norm)
+    if joined != norm:
+        out |= {a for a in _atoms_in(joined) if not any(b in a for b in out)}
+    for hidden in _base64_texts(norm):
+        out |= _atoms_in(normalize(hidden))
     return out
 
 
@@ -122,7 +195,7 @@ def primary_atom(s: str) -> str | None:
     if not found:
         return flat if len(flat) >= MIN_WHOLE_VALUE_LEN else None
     for a in found:
-        if a in (flat, flat.replace(" ", ""), _clean_url(flat)):
+        if a in (flat, re.sub(r"[ -]", "", flat), _clean_url(flat)):
             return a
     return None
 
@@ -184,7 +257,7 @@ class _Values:
             # "Name <atom>" (common contact format) - never free text that merely contains it.
             if len(found) == 1:
                 atom = next(iter(found))
-                if atom in (flat, flat.replace(" ", ""), _clean_url(flat)) or _NAME_ADDR.fullmatch(flat):
+                if atom in (flat, re.sub(r"[ -]", "", flat), _clean_url(flat)) or _NAME_ADDR.fullmatch(flat):
                     self.typed |= found
 
     def contains(self, kind: str, atom: str) -> bool:
