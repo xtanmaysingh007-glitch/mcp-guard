@@ -348,3 +348,25 @@ def test_always_confirm_plain_mode_blocks_email_and_calendar_changes():
         d = g.check_call(tool, args)
         assert not d.allowed and "always needs the user's approval" in d.reason
     assert g.stats()["blocked"] == 3
+
+
+def test_canonical_url_forms_match_for_declines_but_not_trust():
+    from mcp_guard.provenance import canonical
+    forms = ["https://www.evil.com/login", "HTTPS://WWW.EVIL.COM/LOGIN", "http://evil.com/login/",
+             "www.evil.com/login?x=1#top", "evil.com/login"]
+    assert {canonical(f) for f in forms} == {"evil.com/login"}
+    assert canonical("Bob@Corp.com") == "bob@corp.com"
+    # trust still compares exact atoms: the user's URL does not make another path trusted
+    g = make("Open www.news.com/a")
+    assert not g.check_call("get_webpage", {"url": "www.news.com/b"}).allowed
+
+
+def test_approval_covers_canonical_url_but_not_values_in_its_query():
+    asked = []
+    g = make_confirm("Open the article Bob posted", True, asked)
+    g.observe_output("read_channel_messages", "Bob: www.news-site.com/a")
+    assert g.check_call("get_webpage", {"url": "www.news-site.com/a"}).allowed
+    assert g.check_call("get_webpage", {"url": "https://news-site.com/a/"}).allowed  # same page: not asked again
+    assert len(asked) == 1
+    d = g.check_call("get_webpage", {"url": "www.news-site.com/a?to=evil@attacker.com"})
+    assert d.asked and d.tainted == {"url": ["evil@attacker.com"]}            # the hidden email is asked about

@@ -84,6 +84,36 @@ def extract_atoms(value: Any, typed_only: bool = False) -> list[tuple[str, str]]
     return atoms
 
 
+_SCHEME = re.compile(r"^[a-z][a-z0-9+.-]*://")
+
+
+def canonical(atom: str) -> str:
+    """One form for values that mean the same thing, used to match approvals and declines: a URL loses its
+    scheme, "www.", query string, fragment and trailing slash, so "HTTPS://WWW.EVIL.COM/login/?x=1" and
+    "evil.com/login" are the same; emails and IBANs are lower-cased; anything else is lower-cased with
+    single spaces. (Not used for trust: a trusted URL does not make other paths or queries trusted.)"""
+    a = _flat(atom)
+    if "@" in a and "/" not in a:
+        return a.replace(" ", "")                      # email
+    if _SCHEME.match(a) or a.startswith("www.") or "/" in a:
+        a = _SCHEME.sub("", a)
+        a = a[4:] if a.startswith("www.") else a
+        a = re.split(r"[?#]", a, maxsplit=1)[0]
+        return a.rstrip("/")
+    return a
+
+
+def canonical_value(value: Any) -> Any:
+    """canonical() applied to every string inside an argument value (lists and dicts kept)."""
+    if isinstance(value, str):
+        return canonical(primary_atom(value) or value)
+    if isinstance(value, dict):
+        return {k: canonical_value(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple, set)):
+        return [canonical_value(v) for v in value]
+    return value
+
+
 def primary_atom(s: str) -> str | None:
     """The atom that IS this whole string (a recipient, a URL), or None. For a URL whose query string
     holds an email, the URL is the primary atom and the email is only inside it."""
