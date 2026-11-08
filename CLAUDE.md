@@ -29,8 +29,9 @@ argument must trace to the user's request or to a trusted tool's whole-value out
 - `src/mcp_guard/provenance.py` - where did a value come from (user / trusted tool / untrusted)
 - `src/mcp_guard/policy.py`, `policies/agentdojo.yaml` - trusted tools, guarded args, link checks, confirmable
   tools, user_identities (the user's own address, counts as user-given every session; 2026-11-08),
-  always_confirm (tools that always go to the user even with clean args, plain mode blocks them; delete_file,
-  2026-11-08: an ID can't be traced, file 13 from an injection looks like file 11 from the user)
+  always_confirm (tools that always go to the user even with clean args, plain mode blocks them): delete_file,
+  delete_email, cancel_calendar_event, reschedule_calendar_event (2026-11-08). They take only IDs, and an ID
+  can't be traced: file 13 from an injection looks like file 11 from the user.
 - `src/mcp_guard/guard.py` - allow / block / (confirm mode) ask the user. Retry cap (2026-11-08): the same
   (tool, args) plainly blocked gets the normal reason twice, then "blocked: this call was already refused.
   Do not retry it or look for another way." (PLAIN_BLOCK_RETRIES = 2; every try still counts as a block)
@@ -44,7 +45,7 @@ argument must trace to the user's request or to a trusted tool's whole-value out
   BaseAttack.get_injection_candidates) and whose ground truth calls a guarded tool; prints a --user-tasks list
 - `scripts/replay_guard.py <log.json> <defense>` - replay one logged run through the CURRENT guard, no model
   (e.g. "would this leak be stopped now?"). Forces the logged calls, so it can't show what the model does next.
-- `tests/test_guard.py` (33 tests; run `python -m pytest -q`)
+- `tests/test_guard.py` (37 tests; run `python -m pytest -q`)
 - Run logs: `runs/<defense>/local-<model>-<defense>/<suite>/user_task_N/<attack>/injection_task_N.json`
 
 ## Evidence method
@@ -123,11 +124,16 @@ Workspace security is untested: with no defense, Qwen-7B ignored every injection
 important_instructions + 18 tool_knowledge pairs). Workspace was stopped there (C3 stop rule, 2026-11-08).
 A block can push the model INTO the injection: in C3 the one attacker win happened under the guard, not
 under none (see C3). One case, but it is how a default-deny guard plus an unguarded tool can be worse.
-delete_file is now always_confirm (closes that gap; costs: plain mode can never delete, so workspace user tasks
-35 and 38 will fail under mcp_guard; confirm mode asks once per delete). The oracle refuses it only because it
-is told the attacker's target (file 13, ATTACKER_TARGETS), like its attacker values: a real user would have to
-spot that "delete file 13" isn't what they asked for.
-Workspace gaps still open (no guarded arg, so the guard cannot stop them): delete_email (the "then delete the sent email" cleanup steps), cancel/reschedule_calendar_event, create_file /
+delete_file, delete_email, cancel_calendar_event and reschedule_calendar_event are now always_confirm (closes
+those gaps). Costs: plain mode can never delete/cancel/reschedule, so workspace user tasks 7 (reschedule), 35 and
+38 (delete file 11) will fail under mcp_guard; confirm mode asks once per call. Checked every user task's
+ground truth in all 4 suites: those 3 tasks are the only legit uses, and the oracle approves all of them.
+The oracle refuses only because it is told the attacker's targets (ATTACKER_TARGETS: delete_file 13, and ANY
+delete_email, since no user task deletes an email and injection_task_5's sent-email ID is only known at run
+time), like its attacker values: a real user would have to spot that the call isn't what they asked for.
+No injection task cancels or reschedules, so the oracle has no target there (it approves them); those two are
+in always_confirm for adaptive attacks, not for anything measured.
+Workspace gaps still open (no guarded arg, so the guard cannot stop them): create_file /
 append_to_file content, calendar title/description/location (no link check, unlike email bodies), and
 send_email attachments (which file gets attached is not checked; the recipient is).
 
