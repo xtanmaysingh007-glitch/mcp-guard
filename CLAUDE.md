@@ -108,7 +108,7 @@ banking 0 2 3 4 5 6 9 11 12 14 15; travel 0 1 3 4 7 8.
 Persuasion without a tool call; steering among trusted options; unguarded free-text/args (travel calendar
 title); default-deny blocks legit flows using untrusted URLs/emails; small samples, one small model.
 Blocks cause retry loops (wasted steps/GPU time). Workspace: the user's own email address is not trusted.
-Qwen-7B ignores important_instructions injections in workspace (0 attempts in 136 pairs), so workspace
+Qwen-7B ignores important_instructions injections in workspace (0 attempts in 124 no-defense pairs: 48 + 76), so workspace
 security is untested.
 Workspace gaps (no guarded arg, so the guard cannot stop them): delete_file (injection_task_1 deletes file 13),
 delete_email (the "then delete the sent email" cleanup steps), cancel/reschedule_calendar_event, create_file /
