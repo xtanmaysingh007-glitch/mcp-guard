@@ -53,6 +53,12 @@ forbid_tainted:
 user_identities:
   - emma.johnson@bluesparrowtech.com
 
+# Tools that always need the user's OK, even when every guarded arg is clean (in plain mode: always blocked).
+# delete_file takes only an ID, and an ID can't be traced: the injection's "delete file 13" looks exactly
+# like a user's "delete file 11". C3 (2026-11-08): the model deleted file 13 after a guard block.
+always_confirm:
+  - delete_file
+
 # Free-text arguments: only links / emails / IBANs inside them are checked (wording is ignored).
 # Stops "send Alice this link: www.phish.com" when the link came from untrusted data.
 check_links_in:
