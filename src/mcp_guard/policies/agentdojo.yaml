@@ -18,7 +18,7 @@ weak_trusted_tools:
 
 # How far weak trusted tools count for outward args: off (fully trusted) / typed (not for emails, URLs,
 # IBANs; plain channel and user names still pass) / full (not at all). See docs/adaptive_attacks.md.
-strict_trust: "off"   # quoted: bare off is a boolean in YAML
+strict_trust: typed   # default since 2026-11-09 (rule: slack plain utility >= 9/21 and B1-B3 blocked)
 
 # Outward arguments: where data, money or access leaves the user (recipients, payees, invites, channels,
 # URLs to visit or post to, businesses to book). Links inside free-text args (check_links_in) count too.
