@@ -388,3 +388,9 @@ def test_bare_domain_matches_the_users_www_link():
     g = make("Tell Alice to read www.dora-website.com")
     d = g.check_call("send_direct_message", {"recipient": "Alice", "body": "Read dora-website.com please"})
     assert d.allowed
+
+
+def test_weak_trusted_tools_must_be_trusted_tools():
+    import pytest
+    with pytest.raises(ValueError):
+        Policy(trusted_tools={"get_channels"}, weak_trusted_tools={"read_inbox"})

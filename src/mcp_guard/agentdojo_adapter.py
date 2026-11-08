@@ -105,13 +105,14 @@ CONFIRM_USERS = {
     "mcp_guard_confirm_no": lambda tool, args, bad: False,    # same as plain blocking, but with "don't retry"
     "mcp_guard_confirm_yes": lambda tool, args, bad: True,    # worst case: clicks yes on everything
     "mcp_guard_confirm_oracle": _oracle,
+    "mcp_guard_confirm_oracle_strict": _oracle,   # same user, strict_trust policy (experiment)
 }
 # Ablations: the full guard with one part switched off, to see how much each part matters.
 ABLATIONS = {
     "mcp_guard_no_trusted": Policy.without_trusted_tools,  # every tool output counts as untrusted
     "mcp_guard_no_links": Policy.without_link_checks,      # free-text bodies are not scanned for links/emails
 }
-GUARD_DEFENSES = ("mcp_guard", "mcp_guard_taint", *CONFIRM_USERS, *ABLATIONS)
+GUARD_DEFENSES = ("mcp_guard", "mcp_guard_strict", "mcp_guard_taint", *CONFIRM_USERS, *ABLATIONS)
 DEFENSES = ["none", *GUARD_DEFENSES, "spotlighting", "repeat_user_prompt", "tool_filter"]
 
 
@@ -122,6 +123,8 @@ def policy_for(defense: str, policy_path=DEFAULT_POLICY_PATH) -> Policy:
         policy = policy.with_mode("taint")
     if defense in ABLATIONS:
         policy = ABLATIONS[defense](policy)
+    if defense.endswith("_strict"):   # experiment: weak trusted tools don't count for outward args
+        policy = policy.with_strict_trust()
     return policy
 
 

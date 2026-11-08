@@ -267,16 +267,19 @@ class _Values:
 @dataclass
 class Provenance:
     user: _Corpus = field(default_factory=_Corpus)
-    tool_values: _Values = field(default_factory=_Values)
+    tool_values: _Values = field(default_factory=_Values)   # strong trusted tools
+    weak_values: _Values = field(default_factory=_Values)   # weak trusted tools (data an attacker can write)
     untrusted: _Corpus = field(default_factory=_Corpus)
     written: set[tuple[str, str]] = field(default_factory=set)  # (kind, atom) the agent wrote, untraceable
 
     def add_user(self, text: str) -> None:
         self.user.add(text)
 
-    def add_trusted(self, text: str) -> None:
-        """Output of a trusted tool: only its whole values become trusted (minus what the agent wrote)."""
-        self.tool_values.add(text, self.written)
+    def add_trusted(self, text: str, weak: bool = False) -> None:
+        """Output of a trusted tool: only its whole values become trusted (minus what the agent wrote).
+        weak=True: a tool whose data an attacker can write (contacts built from emails, channel names);
+        its values are kept apart so strict mode can refuse them for outward arguments."""
+        (self.weak_values if weak else self.tool_values).add(text, self.written)
 
     def note_written(self, value: Any) -> None:
         """The agent is calling a non-trusted tool with this argument value: remember its untraceable
@@ -286,15 +289,17 @@ class Provenance:
     def add_untrusted(self, text: str) -> None:
         self.untrusted.add(text)
 
-    def is_trusted(self, kind: str, atom: str) -> bool:
-        return self.user.contains(kind, atom) or self.tool_values.contains(kind, atom)
+    def is_trusted(self, kind: str, atom: str, no_weak: bool = False) -> bool:
+        """no_weak=True (strict mode, outward argument): values only a weak trusted tool returned don't count."""
+        return (self.user.contains(kind, atom) or self.tool_values.contains(kind, atom)
+                or (not no_weak and self.weak_values.contains(kind, atom)))
 
-    def unverified_pairs(self, value: Any, typed_only: bool = False) -> list[tuple[str, str]]:
-        return [(k, a) for k, a in extract_atoms(value, typed_only) if not self.is_trusted(k, a)]
+    def unverified_pairs(self, value: Any, typed_only: bool = False, no_weak: bool = False) -> list[tuple[str, str]]:
+        return [(k, a) for k, a in extract_atoms(value, typed_only) if not self.is_trusted(k, a, no_weak)]
 
-    def unverified_atoms(self, value: Any, typed_only: bool = False) -> list[str]:
-        return [a for _, a in self.unverified_pairs(value, typed_only)]
+    def unverified_atoms(self, value: Any, typed_only: bool = False, no_weak: bool = False) -> list[str]:
+        return [a for _, a in self.unverified_pairs(value, typed_only, no_weak)]
 
-    def tainted_atoms(self, value: Any, typed_only: bool = False) -> list[str]:
+    def tainted_atoms(self, value: Any, typed_only: bool = False, no_weak: bool = False) -> list[str]:
         return [a for k, a in extract_atoms(value, typed_only)
-                if not self.is_trusted(k, a) and self.untrusted.contains(k, a)]
+                if not self.is_trusted(k, a, no_weak) and self.untrusted.contains(k, a)]

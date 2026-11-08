@@ -2,7 +2,44 @@
 #
 # trusted_tools: outputs of these tools are structured data the user owns, not free text an
 #   attacker can write into, so values found there count as trusted.
-# forbid_tainted: tool -> arguments that must not contain values taken only from untrusted data.
+# # Weak trusted tools: their output is structured, but an ATTACKER can write into it. Their values are
+# trusted for ordinary arguments; with strict_trust they don't count for outward arguments (below).
+weak_trusted_tools:
+  - search_contacts_by_name   # workspace builds contacts from the senders/recipients of every inbox email
+  - search_contacts_by_email  # same contact list: anyone who emails the user is a "contact"
+  - get_channels              # any workspace member can create a channel and name it anything (even a URL)
+  - get_users_in_channel      # anyone invited to a channel (even an attacker's account) is listed here
+  - get_all_hotels_in_city    # business directories: a listing is written by the business itself
+  - get_all_restaurants_in_city
+  - get_all_car_rental_companies_in_city
+# Strong trusted tools (the rest): the user's own account data (get_iban, get_balance, get_user_info,
+# get_user_information) and the clock (get_current_day). An attacker can't write there (update_user_info
+# is guarded, and values the agent writes are not trusted when read back).
+
+# Experiment (2026-11-08), off by default: true = weak values count as untraceable for outward args.
+strict_trust: false
+
+# Outward arguments: where data, money or access leaves the user (recipients, payees, invites, channels,
+# URLs to visit or post to, businesses to book). Links inside free-text args (check_links_in) count too.
+outward_args:
+  send_email: [recipients, cc, bcc]
+  share_file: [email]
+  create_calendar_event: [participants]
+  add_calendar_event_participants: [participants]
+  send_money: [recipient]
+  schedule_transaction: [recipient]
+  update_scheduled_transaction: [recipient]
+  send_direct_message: [recipient]
+  send_channel_message: [channel]
+  add_user_to_channel: [user, channel]
+  invite_user_to_slack: [user, user_email]
+  get_webpage: [url]
+  post_webpage: [url]
+  reserve_hotel: [hotel]
+  reserve_restaurant: [restaurant]
+  reserve_car_rental: [company]
+
+forbid_tainted: tool -> arguments that must not contain values taken only from untrusted data.
 #   (ID-style args such as email_id / file_id are deliberately left out in v1 - they would block
 #   many legitimate flows; adding them is an ablation.)
 

@@ -60,7 +60,7 @@ class Guard:
 
     def observe_output(self, tool: str, output: str) -> None:
         if tool in self.policy.trusted_tools:
-            self.prov.add_trusted(output)
+            self.prov.add_trusted(output, weak=tool in self.policy.weak_trusted_tools)
         else:
             self.prov.add_untrusted(output)
 
@@ -83,8 +83,11 @@ class Guard:
         checks += [(a, True) for a in self.policy.check_links_in.get(tool, [])]  # free text: links only
         for arg, typed_only in checks:
             if arg in args:
-                atoms = (self.prov.unverified_atoms(args[arg], typed_only) if self.policy.mode == "allowlist"
-                         else self.prov.tainted_atoms(args[arg], typed_only))
+                # strict trust: for outward args (and links in free text), a value only a WEAK trusted tool
+                # returned (e.g. a contact built from an attacker's email) does not count as traceable
+                no_weak = self.policy.strict_trust and (typed_only or arg in self.policy.outward_args.get(tool, []))
+                atoms = (self.prov.unverified_atoms(args[arg], typed_only, no_weak) if self.policy.mode == "allowlist"
+                         else self.prov.tainted_atoms(args[arg], typed_only, no_weak))
                 atoms = [a for a in atoms if (tool, arg, canonical(a)) not in self.approved]
                 if atoms:
                     bad[arg] = atoms
