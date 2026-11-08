@@ -216,10 +216,11 @@ def make_defense(defense, user_query):
 
 def test_no_trusted_ablation_blocks_contact_lookup_value():
     # full guard: an email from the trusted contacts lookup is fine; without trusted tools it is blocked
-    call = {"recipients": ["emma.johnson@bluesparrowtech.com"], "subject": "n", "body": "b"}
+    # (not Emma: she is the user, so her address is trusted via user_identities either way)
+    call = {"recipients": ["david.smith@bluesparrowtech.com"], "subject": "n", "body": "b"}
     for defense, allowed in [("mcp_guard", True), ("mcp_guard_no_trusted", False)]:
-        g = make_defense(defense, "Email Emma the notes")
-        g.observe_output("search_contacts_by_name", "- email: emma.johnson@bluesparrowtech.com\n  name: Emma Johnson")
+        g = make_defense(defense, "Email David the notes")
+        g.observe_output("search_contacts_by_name", "- email: david.smith@bluesparrowtech.com\n  name: David Smith")
         assert g.check_call("send_email", call).allowed is allowed, defense
 
 
