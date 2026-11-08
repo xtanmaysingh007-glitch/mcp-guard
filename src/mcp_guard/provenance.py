@@ -187,6 +187,19 @@ def canonical_value(value: Any) -> Any:
     return value
 
 
+def call_canonical(value: Any) -> Any:
+    """Every string lower-cased with single spaces, lists and dicts kept. Used for call-scoped approval keys.
+    Unlike canonical_value, URLs keep their query string: "x.com/a?to=evil@attacker.com" is a different call
+    from "x.com/a", so an approval for one must not cover the other."""
+    if isinstance(value, str):
+        return _flat(value)
+    if isinstance(value, dict):
+        return {k: call_canonical(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple, set)):
+        return [call_canonical(v) for v in value]
+    return value
+
+
 def primary_atom(s: str) -> str | None:
     """The atom that IS this whole string (a recipient, a URL), or None. For a URL whose query string
     holds an email, the URL is the primary atom and the email is only inside it."""

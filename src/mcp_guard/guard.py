@@ -2,11 +2,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import hashlib
 import json
 from typing import Any, Callable
 
 from .policy import Policy
-from .provenance import Provenance, canonical, canonical_value, iter_strings, primary_atom
+from .provenance import Provenance, call_canonical, canonical, canonical_value, iter_strings, primary_atom
 
 # A plainly blocked call gets the normal "not traceable" reason this many times; any further identical
 # try gets "already refused, stop". (Confirm mode already stops after the user's first "no".)
@@ -46,6 +47,9 @@ class Guard:
         self.approved: set[tuple[str, str, str]] = set()  # (tool, arg, canonical atom)
         self.approved_calls: set[str] = set()             # EXACT call keys the user said yes to
         self.declines = 0                                 # calls the user declined this session
+        # approval_scope "call": approvals given ahead of the call (approve_call), one use each, with expiry
+        self.call_approvals: dict[str, int] = {}          # approval key -> last call number it is valid for
+        self.n_calls = 0                                  # calls checked this session (the expiry clock)
 
     def start_session(self, user_query: str) -> None:
         self.prov = Provenance()
@@ -75,6 +79,25 @@ class Guard:
         call (upper case, trailing slash, ?x=1, no www) counts as the same call."""
         return tool + json.dumps(canonical_value(args), sort_keys=True, default=str)
 
+    @staticmethod
+    def approval_key(tool: str, args: dict[str, Any]) -> str:
+        """Call-scoped approval key: a hash of the tool name and ALL its arguments (canonical)."""
+        raw = tool + json.dumps(call_canonical(args), sort_keys=True, default=str)
+        return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+    def approve_call(self, tool: str, args: dict[str, Any]) -> str:
+        """Record a yes for this exact call before the agent makes it (e.g. a proxy that blocks, shows the
+        user the call, and lets the agent retry once approved). Valid once, for the next approval_ttl_calls
+        checked calls. Returns the key."""
+        key = self.approval_key(tool, args)
+        self.call_approvals[key] = self.n_calls + self.policy.approval_ttl_calls
+        return key
+
+    def _use_call_approval(self, tool: str, args: dict[str, Any]) -> bool:
+        """True (and the approval is used up) if a stored, unexpired approval covers exactly this call."""
+        expires = self.call_approvals.pop(self.approval_key(tool, args), None)
+        return expires is not None and self.n_calls <= expires
+
     def _untraceable(self, tool: str, args: dict[str, Any]) -> dict[str, list[str]]:
         """Guarded argument -> its atoms that trace to neither the user, a trusted tool, nor an approval
         given for this same tool and argument."""
@@ -102,6 +125,7 @@ class Guard:
             self.approved |= {(tool, arg, canonical(a)) for a in atoms if a in shown}
 
     def check_call(self, tool: str, args: dict[str, Any]) -> Decision:
+        self.n_calls += 1
         if self.policy.unknown_tools == "block" and tool not in self.policy.known_tools():
             # default-deny: a tool nobody has classified yet might send, pay or delete; don't guess
             d = Decision(False, tool, f"blocked: {tool} is not in the guard's policy, and unknown tools are "
@@ -114,7 +138,9 @@ class Guard:
         # same whether the user or an injection asked for it. So they always go to the user, or are blocked.
         always = tool in self.policy.always_confirm
         exact, key = self._call_key(tool, args), self._retry_key(tool, args)
-        if (bad or always) and exact in self.approved_calls:
+        if (bad or always) and self._use_call_approval(tool, args):
+            d = Decision(True, tool, "approved by user (approved ahead of the call)", bad, approved=True)
+        elif (bad or always) and exact in self.approved_calls:
             d = Decision(True, tool, "approved by user (same call as before)", bad)
         elif bad or always:
             names = ", ".join(f"{a}={v}" for a, v in bad.items())
@@ -128,8 +154,11 @@ class Guard:
                              "from trusted sources are allowed now.", bad)
             elif self.confirm_fn is not None and (always or tool in self.policy.confirmable):
                 if self.confirm_fn(tool, args, bad):
-                    self._remember_approval(tool, args, bad)
-                    self.approved_calls.add(exact)
+                    if self.policy.approval_scope == "value":
+                        # the yes keeps covering these values (and this exact call) for the session
+                        self._remember_approval(tool, args, bad)
+                        self.approved_calls.add(exact)
+                    # scope "call": the yes is used up by this very call; nothing is remembered
                     d = Decision(True, tool, "approved by user", bad, asked=True, approved=True)
                 else:
                     self.refused[key] = self.refused.get(key, 0) + 1

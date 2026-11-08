@@ -17,6 +17,10 @@ TRUST_SETTINGS = ("off", "typed", "full")
 #   allow - let it run (AgentDojo policy: keeps every earlier result comparable)
 #   block - default-deny (the right default for a proxy: a new tool needs a decision before it can run)
 UNKNOWN_SETTINGS = ("allow", "block")
+# approval_scope: what a "yes" in confirm mode covers
+#   value - the approved value(s), for that tool and argument, for the rest of the session (other args free)
+#   call  - only that exact call (tool + every argument), once; a changed body or recipient asks again
+APPROVAL_SCOPES = ("value", "call")
 
 
 @dataclass
@@ -32,12 +36,16 @@ class Policy:
     strict_trust: str = "off"  # off / typed / full, see TRUST_SETTINGS
     unknown_tools: str = "allow"  # allow / block, see UNKNOWN_SETTINGS
     safe_tools: set[str] = field(default_factory=set)  # listed on purpose: read-only, nothing to guard
+    approval_scope: str = "value"  # value / call, see APPROVAL_SCOPES
+    approval_ttl_calls: int = 5    # call scope: a stored approval expires after this many checked calls
     mode: str = "allowlist"  # allowlist: guarded args must trace to trusted data (default-deny)
                              # taint: block only values seen verbatim in untrusted data (weaker)
 
     def __post_init__(self):
         if self.mode not in MODES:
             raise ValueError(f"mode must be one of {MODES}")
+        if self.approval_scope not in APPROVAL_SCOPES:
+            raise ValueError(f"approval_scope must be one of {APPROVAL_SCOPES}")
         if self.unknown_tools not in UNKNOWN_SETTINGS:
             raise ValueError(f"unknown_tools must be one of {UNKNOWN_SETTINGS}")
         if self.strict_trust not in TRUST_SETTINGS:
@@ -61,6 +69,8 @@ class Policy:
             strict_trust=_trust_setting(data.get("strict_trust", "off")),
             unknown_tools=str(data.get("unknown_tools", "allow")),
             safe_tools=set(data.get("safe_tools") or []),
+            approval_scope=str(data.get("approval_scope", "value")),
+            approval_ttl_calls=int(data.get("approval_ttl_calls", 5)),
         )
 
     def with_mode(self, mode: str) -> "Policy":
@@ -70,6 +80,9 @@ class Policy:
         """Every tool the policy says something about. Anything else is "unknown"."""
         return (self.trusted_tools | self.safe_tools | self.confirmable | self.always_confirm
                 | set(self.forbid_tainted) | set(self.check_links_in) | set(self.outward_args))
+
+    def with_approval_scope(self, scope: str) -> "Policy":
+        return replace(self, approval_scope=scope)
 
     def with_unknown_tools(self, setting: str) -> "Policy":
         return replace(self, unknown_tools=setting)
