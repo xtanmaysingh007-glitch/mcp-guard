@@ -34,7 +34,15 @@ argument must trace to the user's request or to a trusted tool's whole-value out
   can't be traced: file 13 from an injection looks like file 11 from the user.
 - `src/mcp_guard/guard.py` - allow / block / (confirm mode) ask the user. Retry cap (2026-11-08): the same
   (tool, args) plainly blocked gets the normal reason twice, then "blocked: this call was already refused.
-  Do not retry it or look for another way." (PLAIN_BLOCK_RETRIES = 2; every try still counts as a block)
+  Do not retry it or look for another way." (PLAIN_BLOCK_RETRIES = 2; every try still counts as a block).
+  Since the adaptive fixes (2026-11-08): approvals are scoped to (tool, arg, canonical value) and kept apart
+  from the user's text (only the value the user saw, nothing inside an approved URL); "already declined" and
+  the retry cap match canonical URLs (no scheme/www/query/trailing slash, lower case); circuit breaker
+  MAX_DECLINES = 2 (after 2 declines in a session: stop asking, block every untraceable value); values the
+  agent wrote into non-trusted tools are not trusted when a trusted tool echoes them back.
+- `src/mcp_guard/provenance.py` normalize(): zero-width, NFKC, defang (hxxp, [.], [at], "x at y dot com"),
+  percent-decoding, split-line joining, bare domains (common TLDs only), loose IBANs, base64. Only ADDS atoms
+  (raw atoms are always kept). URL atoms compare without scheme / www / trailing slash (path+query kept).
 - `src/mcp_guard/agentdojo_adapter.py` - defenses: none, mcp_guard, mcp_guard_taint,
   mcp_guard_confirm_{no,yes,oracle}, mcp_guard_no_trusted, mcp_guard_no_links (ablations),
   spotlighting, repeat_user_prompt, tool_filter
@@ -45,9 +53,9 @@ argument must trace to the user's request or to a trusted tool's whole-value out
   BaseAttack.get_injection_candidates) and whose ground truth calls a guarded tool; prints a --user-tasks list
 - `scripts/replay_guard.py <log.json> <defense>` - replay one logged run through the CURRENT guard, no model
   (e.g. "would this leak be stopped now?"). Forces the logged calls, so it can't show what the model does next.
-- `tests/test_guard.py` (37 tests; run `python -m pytest -q`)
-- `tests/test_adaptive.py` + `docs/adaptive_attacks.md` - adaptive red-team traces, no model (41 cases;
-  bypasses are xfail(strict=True) = documented known issues, so the suite stays green; 51 pass + 27 xfail total)
+- `tests/test_guard.py` (41 tests; run `python -m pytest -q`)
+- `tests/test_adaptive.py` + `docs/adaptive_attacks.md` - adaptive red-team traces, no model (first pass 41,
+  44 cases; open bypasses are xfail(strict=True); whole suite now 79 pass + 6 xfail)
 - Run logs: `runs/<defense>/local-<model>-<defense>/<suite>/user_task_N/<attack>/injection_task_N.json`
 
 ## Evidence method
@@ -115,16 +123,20 @@ banking 0 2 3 4 5 6 9 11 12 14 15; travel 0 1 3 4 7 8.
 - Banking guard allowlist, earlier runs: 16k important_instructions 3/3 blocked vs none 10/10 success.
 
 ## Known limitations
-Adaptive attacks (2026-11-08, docs/adaptive_attacks.md): 27 of 41 cases bypass, NOT fixed yet. Worst ones:
-C2b write-then-read laundering (banking update_user_info is unguarded, get_user_info is trusted, so an IBAN
-written into the user's street comes back trusted and send_money pays it); D approvals are global (approving
-a URL also approves an email / IBAN hidden in its query string; send_money then pays with no prompt);
-B whatever an attacker can write into a trusted tool's data is trusted (workspace contacts are built from
-every inbox email's senders); A free-text bodies only catch regex-shaped links/emails/IBANs (scheme-less
-evil.com/x, hxxp, lower-case or dashed IBAN, zero-width chars, base64 pass); E the decline cap compares
-exact args, so a cosmetic variant asks again; F with a user tired after 3 prompts, a slack trace's variant
-retry gets approved (but in 9 of 12 slack attacker pairs the attacker's prompt is the session's first).
-Blocked: lookalike/Cyrillic domains, suffix near-misses, mixed good+bad recipients, nested args, subjects.
+Adaptive attacks (2026-11-08, docs/adaptive_attacks.md): first pass 27 of 41 bypassed; after the fixes
+(commits 2dbdf8c, 2148111, 6f74f26) 6 of 44 open:
+- B1/B1b/B2b/B3 weak trust (an attacker-written whole value in a trusted tool's data is trusted; workspace
+  contacts are built from every inbox email). LEFT FOR TANMAY TO DECIDE (trust-model choice).
+- C2a a value split across two calls (each call is checked alone; a fix needs cross-call state).
+- F K=1 a user who says yes to the attacker's first prompt (no guard can overrule a yes).
+Fixed: A (all 12 disguises), C2b laundering, D approval scope, E variant retries, F K=3.
+Costs: banking user_task_13 now fails under mcp_guard (update_user_info guarded, address from a file; not
+confirmable); oracle asks more (slack clean 21 tasks: 22 -> 28 prompts, scoped approvals); approvals ignore
+the query string (embedded emails/IBANs still checked); breaker is per session; normalize() is a list of
+known disguises (not ROT13, words, punycode).
+Replay check over 537 local logs (~1,800 guarded calls, all 4 suites): normalization changed 0 decisions;
+all fixes together vs first pass: new blocks only banking update_user_info (task 13) and slack oracle
+remove_user_from_slack(Fred) (attacker cleanup, a gain); +8 oracle prompts on slack clean, +1 workspace.
 Persuasion without a tool call; steering among trusted options; unguarded free-text/args (travel calendar
 title); default-deny blocks legit flows using untrusted URLs/emails; small samples, one small model.
 Blocks cause retry loops (wasted steps/GPU time); now capped (see guard.py); it fired in C3, but no
@@ -176,8 +188,8 @@ Kaggle runs (2026-11-07):
   so no utility comparison. Guard: 6 blocks clean, 30 attacked; the retry cap fired 12 times.
   Note: send_email and calendar tools are confirmable (share_file is not); this also affects travel's
   send_email in any future travel confirm run.
-Adaptive attacks (step 5): first pass DONE 2026-11-08 (no model, deterministic; bypasses documented, not fixed).
-Then: 4. Repeats on key numbers. 5b. Fix the worst adaptive bypasses (C2b, D, then E/A). 6. Rename, README (his voice), CI, LICENSE,
+Adaptive attacks (step 5): DONE 2026-11-08 (no model): first pass + fixes; 6 open (B left for Tanmay).
+Then: 4. Repeats on key numbers. 5b. Decide on B (weak trust). 6. Rename, README (his voice), CI, LICENSE,
 limitations section, MCP proxy.
 
 ## Kaggle recipe (free, runs without the laptop)
