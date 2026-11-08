@@ -154,7 +154,7 @@ class Guard:
                              "from trusted sources are allowed now.", bad)
             elif self.confirm_fn is not None and (always or tool in self.policy.confirmable):
                 if self.confirm_fn(tool, args, bad):
-                    if self.policy.approval_scope == "value":
+                    if self.policy.scope_for(tool) == "value":
                         # the yes keeps covering these values (and this exact call) for the session
                         self._remember_approval(tool, args, bad)
                         self.approved_calls.add(exact)

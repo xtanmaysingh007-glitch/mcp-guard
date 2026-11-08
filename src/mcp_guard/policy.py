@@ -36,7 +36,8 @@ class Policy:
     strict_trust: str = "off"  # off / typed / full, see TRUST_SETTINGS
     unknown_tools: str = "allow"  # allow / block, see UNKNOWN_SETTINGS
     safe_tools: set[str] = field(default_factory=set)  # listed on purpose: read-only, nothing to guard
-    approval_scope: str = "value"  # value / call, see APPROVAL_SCOPES
+    approval_scope: str = "value"  # value / call, see APPROVAL_SCOPES: the default for every tool ...
+    approval_scope_by_tool: dict[str, str] = field(default_factory=dict)  # ... and per-tool overrides
     approval_ttl_calls: int = 5    # call scope: a stored approval expires after this many checked calls
     mode: str = "allowlist"  # allowlist: guarded args must trace to trusted data (default-deny)
                              # taint: block only values seen verbatim in untrusted data (weaker)
@@ -44,7 +45,8 @@ class Policy:
     def __post_init__(self):
         if self.mode not in MODES:
             raise ValueError(f"mode must be one of {MODES}")
-        if self.approval_scope not in APPROVAL_SCOPES:
+        bad_scopes = {s for s in [self.approval_scope, *self.approval_scope_by_tool.values()] if s not in APPROVAL_SCOPES}
+        if bad_scopes:
             raise ValueError(f"approval_scope must be one of {APPROVAL_SCOPES}")
         if self.unknown_tools not in UNKNOWN_SETTINGS:
             raise ValueError(f"unknown_tools must be one of {UNKNOWN_SETTINGS}")
@@ -70,6 +72,7 @@ class Policy:
             unknown_tools=str(data.get("unknown_tools", "allow")),
             safe_tools=set(data.get("safe_tools") or []),
             approval_scope=str(data.get("approval_scope", "value")),
+            approval_scope_by_tool={k: str(v) for k, v in (data.get("approval_scope_by_tool") or {}).items()},
             approval_ttl_calls=int(data.get("approval_ttl_calls", 5)),
         )
 
@@ -81,8 +84,13 @@ class Policy:
         return (self.trusted_tools | self.safe_tools | self.confirmable | self.always_confirm
                 | set(self.forbid_tainted) | set(self.check_links_in) | set(self.outward_args))
 
+    def scope_for(self, tool: str) -> str:
+        """approval_scope for this tool: its override, else the default."""
+        return self.approval_scope_by_tool.get(tool, self.approval_scope)
+
     def with_approval_scope(self, scope: str) -> "Policy":
-        return replace(self, approval_scope=scope)
+        """The same scope for every tool (overrides dropped)."""
+        return replace(self, approval_scope=scope, approval_scope_by_tool={})
 
     def with_unknown_tools(self, setting: str) -> "Policy":
         return replace(self, unknown_tools=setting)

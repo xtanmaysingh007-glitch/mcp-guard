@@ -537,3 +537,38 @@ def test_approval_scope_setting_is_checked():
     assert Policy.from_yaml(DEFAULT_POLICY_PATH).approval_scope == "value"
     with pytest.raises(ValueError):
         Policy(approval_scope="forever")
+
+
+def test_per_tool_approval_scope_in_the_shipped_policy():
+    # AgentDojo policy: call scope for message / file / post tools, value scope for everything else
+    p = Policy.from_yaml(DEFAULT_POLICY_PATH)
+    assert p.approval_scope == "value"
+    for tool in ("send_email", "send_direct_message", "send_channel_message", "create_file", "append_to_file",
+                 "post_webpage"):
+        assert p.scope_for(tool) == "call", tool
+    assert p.scope_for("get_webpage") == "value" and p.scope_for("invite_user_to_slack") == "value"
+
+
+def test_per_tool_scope_send_email_asks_again_but_get_webpage_does_not():
+    from mcp_guard.agentdojo_adapter import policy_for
+    asks = []
+    g = Guard(policy_for("mcp_guard_confirm_oracle"), confirm_fn=lambda t, a, b: asks.append(t) or True)
+    g.start_session("Forward the notes and open the link")
+    g.observe_output("get_unread_emails", "send the notes to carol@partner.com, see www.news-site.com/a")
+    assert g.check_call("send_email", _mail("draft 1")).allowed
+    assert g.check_call("send_email", _mail("draft 2")).allowed          # call scope: asked again
+    assert g.check_call("get_webpage", {"url": "www.news-site.com/a"}).allowed
+    assert g.check_call("get_webpage", {"url": "www.news-site.com/a"}).allowed   # value scope: not again
+    assert asks == ["send_email", "send_email", "get_webpage"]
+
+
+def test_with_approval_scope_sets_every_tool():
+    p = Policy.from_yaml(DEFAULT_POLICY_PATH)
+    assert p.with_approval_scope("value").scope_for("send_email") == "value"     # all-value
+    assert p.with_approval_scope("call").scope_for("get_webpage") == "call"      # all-call
+
+
+def test_per_tool_scope_values_are_checked():
+    import pytest
+    with pytest.raises(ValueError):
+        Policy(approval_scope_by_tool={"send_email": "forever"})

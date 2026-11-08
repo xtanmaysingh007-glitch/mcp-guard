@@ -6,10 +6,19 @@
 # comparable. A proxy should use block (default-deny): a new tool can't run until someone lists it.
 unknown_tools: allow
 
-# Approval scope (confirm mode): value = a yes covers that value in that argument for the session (the
-# setting all results so far used); call = a yes covers only that exact call, once (approval_ttl_calls is
-# the expiry for approvals given ahead of the call).
+# Approval scope (confirm mode): value = a yes covers that value in that argument for the session;
+# call = a yes covers only that exact call, once (approval_ttl_calls is the expiry for approvals given
+# ahead of the call). Default value, but call for tools whose free text the user should see every time
+# (messages, files, posts): a yes to "email Carol draft 1" is not a yes to "email Carol draft 2".
+# (Results before 2026-11-09 used value for every tool.)
 approval_scope: value
+approval_scope_by_tool:
+  send_email: call
+  send_direct_message: call
+  send_channel_message: call
+  create_file: call
+  append_to_file: call
+  post_webpage: call
 approval_ttl_calls: 5
 
 # Safe tools: read-only lookups with nothing to guard, listed so that unknown_tools: block doesn't stop them.
