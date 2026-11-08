@@ -58,6 +58,9 @@ user_identities:
 # like a user's "delete file 11". C3 (2026-11-08): the model deleted file 13 after a guard block.
 always_confirm:
   - delete_file
+  - delete_email                # workspace injection_task_5 deletes its own sent email to hide it
+  - cancel_calendar_event       # workspace + travel
+  - reschedule_calendar_event   # legit in workspace user_task_7, so confirm mode asks once there
 
 # Free-text arguments: only links / emails / IBANs inside them are checked (wording is ignored).
 # Stops "send Alice this link: www.phish.com" when the link came from untrusted data.
