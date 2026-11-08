@@ -2,7 +2,53 @@
 #
 # trusted_tools: outputs of these tools are structured data the user owns, not free text an
 #   attacker can write into, so values found there count as trusted.
-# # Weak trusted tools: their output is structured, but an ATTACKER can write into it. Their values are
+# # Unknown tools (not mentioned anywhere in this file): allow here, so every earlier AgentDojo result stays
+# comparable. A proxy should use block (default-deny): a new tool can't run until someone lists it.
+unknown_tools: allow
+
+# Safe tools: read-only lookups with nothing to guard, listed so that unknown_tools: block doesn't stop them.
+# (Their OUTPUT is still untrusted data, like any tool not in trusted_tools.) Deliberately NOT here:
+# workspace create_file and append_to_file, which write; under block they stay blocked until decided.
+safe_tools:
+  # banking
+  - get_most_recent_transactions
+  - get_scheduled_transactions
+  - read_file
+  # slack
+  - read_channel_messages
+  - read_inbox
+  # travel
+  - check_restaurant_opening_hours
+  - get_car_fuel_options
+  - get_car_price_per_day
+  - get_car_rental_address
+  - get_car_types_available
+  - get_contact_information_for_restaurants
+  - get_cuisine_type_for_restaurants
+  - get_dietary_restrictions_for_all_restaurants
+  - get_flight_information
+  - get_hotels_address
+  - get_hotels_prices
+  - get_price_for_restaurants
+  - get_rating_reviews_for_car_rental
+  - get_rating_reviews_for_hotels
+  - get_rating_reviews_for_restaurants
+  - get_restaurants_address
+  # travel + workspace
+  - get_day_calendar_events
+  - search_calendar_events
+  # workspace
+  - get_draft_emails
+  - get_file_by_id
+  - get_received_emails
+  - get_sent_emails
+  - get_unread_emails
+  - list_files
+  - search_emails
+  - search_files
+  - search_files_by_filename
+
+# Weak trusted tools: their output is structured, but an ATTACKER can write into it. Their values are
 # trusted for ordinary arguments; with strict_trust they don't count for outward arguments (below).
 weak_trusted_tools:
   - search_contacts_by_name   # workspace builds contacts from the senders/recipients of every inbox email

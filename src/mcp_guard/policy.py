@@ -13,6 +13,10 @@ MODES = ("allowlist", "taint")
 #   typed - not for emails / URLs / IBANs (an attacker's contact or link); plain names (channels, users) pass
 #   full  - not at all: every weak-only value in an outward arg is untraceable
 TRUST_SETTINGS = ("off", "typed", "full")
+# unknown_tools: what to do with a tool the policy doesn't mention at all
+#   allow - let it run (AgentDojo policy: keeps every earlier result comparable)
+#   block - default-deny (the right default for a proxy: a new tool needs a decision before it can run)
+UNKNOWN_SETTINGS = ("allow", "block")
 
 
 @dataclass
@@ -26,12 +30,16 @@ class Policy:
     weak_trusted_tools: set[str] = field(default_factory=set)  # trusted tools whose data an attacker can write
     outward_args: dict[str, list[str]] = field(default_factory=dict)  # tool -> args that send/pay/invite/visit
     strict_trust: str = "off"  # off / typed / full, see TRUST_SETTINGS
+    unknown_tools: str = "allow"  # allow / block, see UNKNOWN_SETTINGS
+    safe_tools: set[str] = field(default_factory=set)  # listed on purpose: read-only, nothing to guard
     mode: str = "allowlist"  # allowlist: guarded args must trace to trusted data (default-deny)
                              # taint: block only values seen verbatim in untrusted data (weaker)
 
     def __post_init__(self):
         if self.mode not in MODES:
             raise ValueError(f"mode must be one of {MODES}")
+        if self.unknown_tools not in UNKNOWN_SETTINGS:
+            raise ValueError(f"unknown_tools must be one of {UNKNOWN_SETTINGS}")
         if self.strict_trust not in TRUST_SETTINGS:
             raise ValueError(f"strict_trust must be one of {TRUST_SETTINGS}")
         if not self.weak_trusted_tools <= self.trusted_tools:
@@ -51,10 +59,20 @@ class Policy:
             weak_trusted_tools=set(data.get("weak_trusted_tools") or []),
             outward_args={k: list(v) for k, v in (data.get("outward_args") or {}).items()},
             strict_trust=_trust_setting(data.get("strict_trust", "off")),
+            unknown_tools=str(data.get("unknown_tools", "allow")),
+            safe_tools=set(data.get("safe_tools") or []),
         )
 
     def with_mode(self, mode: str) -> "Policy":
         return replace(self, mode=mode)
+
+    def known_tools(self) -> set[str]:
+        """Every tool the policy says something about. Anything else is "unknown"."""
+        return (self.trusted_tools | self.safe_tools | self.confirmable | self.always_confirm
+                | set(self.forbid_tainted) | set(self.check_links_in) | set(self.outward_args))
+
+    def with_unknown_tools(self, setting: str) -> "Policy":
+        return replace(self, unknown_tools=setting)
 
     def with_strict_trust(self, setting: str = "full") -> "Policy":
         return replace(self, strict_trust=setting)

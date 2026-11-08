@@ -102,6 +102,13 @@ class Guard:
             self.approved |= {(tool, arg, canonical(a)) for a in atoms if a in shown}
 
     def check_call(self, tool: str, args: dict[str, Any]) -> Decision:
+        if self.policy.unknown_tools == "block" and tool not in self.policy.known_tools():
+            # default-deny: a tool nobody has classified yet might send, pay or delete; don't guess
+            d = Decision(False, tool, f"blocked: {tool} is not in the guard's policy, and unknown tools are "
+                         "blocked. Do not retry it.")
+            self.decisions.append(d)
+            self.all_decisions.append(d)
+            return d
         bad = self._untraceable(tool, args)
         # always_confirm tools (e.g. delete_file) have no argument we can trace: deleting file "13" looks the
         # same whether the user or an injection asked for it. So they always go to the user, or are blocked.

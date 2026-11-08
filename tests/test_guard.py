@@ -428,3 +428,40 @@ def test_strict_trust_setting_parsing():
     assert p.no_weak_kinds(outward=False) == frozenset()            # non-outward args: never affected
     assert p.no_weak_kinds(outward=True) == frozenset({"typed"})
     assert Policy(strict_trust="full").no_weak_kinds(True) == frozenset({"typed", "whole"})
+
+
+def test_unknown_tool_allowed_under_allow_blocked_under_block():
+    policy = Policy.from_yaml(DEFAULT_POLICY_PATH)
+    assert policy.unknown_tools == "allow"           # the AgentDojo policy: earlier results stay comparable
+    g = Guard(policy)
+    g.start_session("Tidy up my drive")
+    assert g.check_call("format_disk", {"drive": "C"}).allowed
+    g = Guard(policy.with_unknown_tools("block"))
+    g.start_session("Tidy up my drive")
+    d = g.check_call("format_disk", {"drive": "C"})
+    assert not d.allowed and "not in the guard's policy" in d.reason
+    assert g.stats()["blocked_by_tool"] == {"format_disk": 1}
+
+
+def test_block_mode_keeps_safe_trusted_and_guarded_tools_working():
+    g = Guard(Policy.from_yaml(DEFAULT_POLICY_PATH).with_unknown_tools("block"))
+    g.start_session("Email alice@corp.com my unread emails")
+    assert g.check_call("get_unread_emails", {}).allowed                       # listed in safe_tools
+    assert g.check_call("get_current_day", {}).allowed                         # a trusted tool
+    assert g.check_call("send_email", {"recipients": ["alice@corp.com"], "subject": "s", "body": "b"}).allowed
+    assert not g.check_call("create_file", {"filename": "x", "content": "y"}).allowed  # writes: not listed
+
+
+def test_unknown_tools_setting_is_checked():
+    import pytest
+    with pytest.raises(ValueError):
+        Policy(unknown_tools="maybe")
+
+
+def test_only_the_two_write_tools_are_unknown_in_agentdojo():
+    # under block, every AgentDojo tool except workspace's create_file / append_to_file is known
+    from agentdojo.task_suite.load_suites import get_suite
+    known = Policy.from_yaml(DEFAULT_POLICY_PATH).known_tools()
+    unknown = {f.name for n in ("banking", "slack", "travel", "workspace")
+               for f in get_suite("v1.2.2", n).tools} - known
+    assert unknown == {"create_file", "append_to_file"}
