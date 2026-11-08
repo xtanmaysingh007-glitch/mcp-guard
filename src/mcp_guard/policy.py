@@ -16,6 +16,7 @@ class Policy:
     forbid_tainted: dict[str, list[str]] = field(default_factory=dict)  # tool -> guarded arg names
     check_links_in: dict[str, list[str]] = field(default_factory=dict)  # tool -> free-text args: links only
     confirmable: set[str] = field(default_factory=set)  # tools where a refused call may be shown to the user instead
+    user_identities: list[str] = field(default_factory=list)  # the user's own addresses etc.: count as user-given
     mode: str = "allowlist"  # allowlist: guarded args must trace to trusted data (default-deny)
                              # taint: block only values seen verbatim in untrusted data (weaker)
 
@@ -32,6 +33,7 @@ class Policy:
             confirmable=set(data.get("confirmable", [])),
             mode=data.get("mode", "allowlist"),
             check_links_in={k: list(v) for k, v in (data.get("check_links_in") or {}).items()},
+            user_identities=[str(v) for v in (data.get("user_identities") or [])],
         )
 
     def with_mode(self, mode: str) -> "Policy":

@@ -47,6 +47,12 @@ forbid_tainted:
   reserve_restaurant: [restaurant]
   reserve_car_rental: [company]
 
+# The user's own identity: counts as user-given in every session (exact match, like any email).
+# Without it, inviting yourself to your own calendar event is blocked (no trusted "who am I" tool in
+# workspace). Emma Johnson is the workspace user (and the travel user).
+user_identities:
+  - emma.johnson@bluesparrowtech.com
+
 # Free-text arguments: only links / emails / IBANs inside them are checked (wording is ignored).
 # Stops "send Alice this link: www.phish.com" when the link came from untrusted data.
 check_links_in:

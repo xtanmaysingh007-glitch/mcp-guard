@@ -35,6 +35,10 @@ class Guard:
         self.decisions = []
         self.refused = {}
         self.prov.add_user(user_query)
+        # The user's own identity (e.g. their email address) is something they "said" in every session,
+        # even when the request doesn't spell it out. Exact match only, like any typed value.
+        for identity in self.policy.user_identities:
+            self.prov.add_user(identity)
         self.n_sessions += 1
 
     def observe_output(self, tool: str, output: str) -> None:
