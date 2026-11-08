@@ -16,8 +16,9 @@ weak_trusted_tools:
 # get_user_information) and the clock (get_current_day). An attacker can't write there (update_user_info
 # is guarded, and values the agent writes are not trusted when read back).
 
-# Experiment (2026-11-08), off by default: true = weak values count as untraceable for outward args.
-strict_trust: false
+# How far weak trusted tools count for outward args: off (fully trusted) / typed (not for emails, URLs,
+# IBANs; plain channel and user names still pass) / full (not at all). See docs/adaptive_attacks.md.
+strict_trust: "off"   # quoted: bare off is a boolean in YAML
 
 # Outward arguments: where data, money or access leaves the user (recipients, payees, invites, channels,
 # URLs to visit or post to, businesses to book). Links inside free-text args (check_links_in) count too.

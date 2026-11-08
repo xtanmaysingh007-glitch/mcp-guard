@@ -8,6 +8,11 @@ import yaml
 
 
 MODES = ("allowlist", "taint")
+# strict_trust settings: how far to trust WEAK trusted tools (data an attacker can write) for outward args
+#   off   - like any trusted tool
+#   typed - not for emails / URLs / IBANs (an attacker's contact or link); plain names (channels, users) pass
+#   full  - not at all: every weak-only value in an outward arg is untraceable
+TRUST_SETTINGS = ("off", "typed", "full")
 
 
 @dataclass
@@ -20,13 +25,15 @@ class Policy:
     user_identities: list[str] = field(default_factory=list)  # the user's own addresses etc.: count as user-given
     weak_trusted_tools: set[str] = field(default_factory=set)  # trusted tools whose data an attacker can write
     outward_args: dict[str, list[str]] = field(default_factory=dict)  # tool -> args that send/pay/invite/visit
-    strict_trust: bool = False  # True: weak tools' values don't count for outward args (or links in free text)
+    strict_trust: str = "off"  # off / typed / full, see TRUST_SETTINGS
     mode: str = "allowlist"  # allowlist: guarded args must trace to trusted data (default-deny)
                              # taint: block only values seen verbatim in untrusted data (weaker)
 
     def __post_init__(self):
         if self.mode not in MODES:
             raise ValueError(f"mode must be one of {MODES}")
+        if self.strict_trust not in TRUST_SETTINGS:
+            raise ValueError(f"strict_trust must be one of {TRUST_SETTINGS}")
         if not self.weak_trusted_tools <= self.trusted_tools:
             raise ValueError(f"weak_trusted_tools must be trusted tools: {self.weak_trusted_tools - self.trusted_tools}")
 
@@ -43,15 +50,21 @@ class Policy:
             user_identities=[str(v) for v in (data.get("user_identities") or [])],
             weak_trusted_tools=set(data.get("weak_trusted_tools") or []),
             outward_args={k: list(v) for k, v in (data.get("outward_args") or {}).items()},
-            strict_trust=bool(data.get("strict_trust", False)),
+            strict_trust=_trust_setting(data.get("strict_trust", "off")),
         )
 
     def with_mode(self, mode: str) -> "Policy":
         return replace(self, mode=mode)
 
-    def with_strict_trust(self) -> "Policy":
-        """Experiment: weak trusted tools' values are refused for outward arguments."""
-        return replace(self, strict_trust=True)
+    def with_strict_trust(self, setting: str = "full") -> "Policy":
+        return replace(self, strict_trust=setting)
+
+    def no_weak_kinds(self, outward: bool) -> frozenset[str]:
+        """Atom kinds ("typed" = email/URL/IBAN, "whole" = plain value) for which a value that only a weak
+        trusted tool returned does NOT count as traceable. Only outward arguments are affected."""
+        if not outward or self.strict_trust == "off":
+            return frozenset()
+        return frozenset({"typed"}) if self.strict_trust == "typed" else frozenset({"typed", "whole"})
 
     def without_trusted_tools(self) -> "Policy":
         """Ablation: treat every tool output as untrusted."""
@@ -60,6 +73,15 @@ class Policy:
     def without_link_checks(self) -> "Policy":
         """Ablation: do not scan free-text args for links/emails/IBANs."""
         return replace(self, check_links_in={})
+
+
+def _trust_setting(value) -> str:
+    """YAML may say true/false (older files): true = full, false = off."""
+    if value is True:
+        return "full"
+    if value is False or value is None:
+        return "off"
+    return str(value)
 
 
 DEFAULT_POLICY_PATH = Path(__file__).parent / "policies" / "agentdojo.yaml"

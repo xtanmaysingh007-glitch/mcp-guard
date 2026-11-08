@@ -19,7 +19,7 @@ from agentdojo.functions_runtime import EmptyEnv, Env, FunctionsRuntime
 from agentdojo.types import ChatMessage, ChatToolResultMessage, text_content_block_from_string
 
 from .guard import Guard
-from .policy import DEFAULT_POLICY_PATH, Policy
+from .policy import TRUST_SETTINGS, DEFAULT_POLICY_PATH, Policy
 
 
 class GuardSessionStart(BasePipelineElement):
@@ -105,14 +105,16 @@ CONFIRM_USERS = {
     "mcp_guard_confirm_no": lambda tool, args, bad: False,    # same as plain blocking, but with "don't retry"
     "mcp_guard_confirm_yes": lambda tool, args, bad: True,    # worst case: clicks yes on everything
     "mcp_guard_confirm_oracle": _oracle,
-    "mcp_guard_confirm_oracle_strict": _oracle,   # same user, strict_trust policy (experiment)
+    # same careful user, with each strict_trust setting forced (to compare them)
+    **{f"mcp_guard_confirm_oracle_trust_{s}": _oracle for s in TRUST_SETTINGS},
 }
 # Ablations: the full guard with one part switched off, to see how much each part matters.
 ABLATIONS = {
     "mcp_guard_no_trusted": Policy.without_trusted_tools,  # every tool output counts as untrusted
     "mcp_guard_no_links": Policy.without_link_checks,      # free-text bodies are not scanned for links/emails
 }
-GUARD_DEFENSES = ("mcp_guard", "mcp_guard_strict", "mcp_guard_taint", *CONFIRM_USERS, *ABLATIONS)
+GUARD_DEFENSES = ("mcp_guard", *(f"mcp_guard_trust_{s}" for s in TRUST_SETTINGS), "mcp_guard_taint",
+                  *CONFIRM_USERS, *ABLATIONS)
 DEFENSES = ["none", *GUARD_DEFENSES, "spotlighting", "repeat_user_prompt", "tool_filter"]
 
 
@@ -123,8 +125,9 @@ def policy_for(defense: str, policy_path=DEFAULT_POLICY_PATH) -> Policy:
         policy = policy.with_mode("taint")
     if defense in ABLATIONS:
         policy = ABLATIONS[defense](policy)
-    if defense.endswith("_strict"):   # experiment: weak trusted tools don't count for outward args
-        policy = policy.with_strict_trust()
+    for setting in TRUST_SETTINGS:      # "..._trust_typed" etc.: force that strict_trust setting
+        if defense.endswith(f"_trust_{setting}"):
+            policy = policy.with_strict_trust(setting)
     return policy
 
 

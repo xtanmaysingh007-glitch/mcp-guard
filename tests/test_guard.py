@@ -405,3 +405,16 @@ def test_weak_trusted_tools_must_be_trusted_tools():
     import pytest
     with pytest.raises(ValueError):
         Policy(trusted_tools={"get_channels"}, weak_trusted_tools={"read_inbox"})
+
+
+def test_strict_trust_setting_parsing():
+    import pytest
+    assert Policy(strict_trust="typed").strict_trust == "typed"
+    with pytest.raises(ValueError):
+        Policy(strict_trust="maybe")
+    from mcp_guard.policy import _trust_setting
+    assert (_trust_setting(True), _trust_setting(False), _trust_setting("typed")) == ("full", "off", "typed")
+    p = Policy(strict_trust="typed")
+    assert p.no_weak_kinds(outward=False) == frozenset()            # non-outward args: never affected
+    assert p.no_weak_kinds(outward=True) == frozenset({"typed"})
+    assert Policy(strict_trust="full").no_weak_kinds(True) == frozenset({"typed", "whole"})

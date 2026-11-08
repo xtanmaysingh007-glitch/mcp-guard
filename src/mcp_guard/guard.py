@@ -84,8 +84,9 @@ class Guard:
         for arg, typed_only in checks:
             if arg in args:
                 # strict trust: for outward args (and links in free text), a value only a WEAK trusted tool
-                # returned (e.g. a contact built from an attacker's email) does not count as traceable
-                no_weak = self.policy.strict_trust and (typed_only or arg in self.policy.outward_args.get(tool, []))
+                # returned (e.g. a contact built from an attacker's email) may not count as traceable
+                outward = typed_only or arg in self.policy.outward_args.get(tool, [])
+                no_weak = self.policy.no_weak_kinds(outward)
                 atoms = (self.prov.unverified_atoms(args[arg], typed_only, no_weak) if self.policy.mode == "allowlist"
                          else self.prov.tainted_atoms(args[arg], typed_only, no_weak))
                 atoms = [a for a in atoms if (tool, arg, canonical(a)) not in self.approved]

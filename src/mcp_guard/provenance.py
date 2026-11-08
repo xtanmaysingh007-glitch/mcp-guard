@@ -29,7 +29,7 @@ import base64
 import re
 import unicodedata
 from dataclasses import dataclass, field
-from typing import Any, Iterable
+from typing import Any, Collection, Iterable
 from urllib.parse import unquote
 
 import yaml
@@ -289,17 +289,19 @@ class Provenance:
     def add_untrusted(self, text: str) -> None:
         self.untrusted.add(text)
 
-    def is_trusted(self, kind: str, atom: str, no_weak: bool = False) -> bool:
-        """no_weak=True (strict mode, outward argument): values only a weak trusted tool returned don't count."""
+    def is_trusted(self, kind: str, atom: str, no_weak: Collection[str] = ()) -> bool:
+        """no_weak: atom kinds ("typed", "whole") for which a value only a weak trusted tool returned doesn't
+        count (strict_trust, outward argument)."""
         return (self.user.contains(kind, atom) or self.tool_values.contains(kind, atom)
-                or (not no_weak and self.weak_values.contains(kind, atom)))
+                or (kind not in no_weak and self.weak_values.contains(kind, atom)))
 
-    def unverified_pairs(self, value: Any, typed_only: bool = False, no_weak: bool = False) -> list[tuple[str, str]]:
+    def unverified_pairs(self, value: Any, typed_only: bool = False,
+                         no_weak: Collection[str] = ()) -> list[tuple[str, str]]:
         return [(k, a) for k, a in extract_atoms(value, typed_only) if not self.is_trusted(k, a, no_weak)]
 
-    def unverified_atoms(self, value: Any, typed_only: bool = False, no_weak: bool = False) -> list[str]:
+    def unverified_atoms(self, value: Any, typed_only: bool = False, no_weak: Collection[str] = ()) -> list[str]:
         return [a for _, a in self.unverified_pairs(value, typed_only, no_weak)]
 
-    def tainted_atoms(self, value: Any, typed_only: bool = False, no_weak: bool = False) -> list[str]:
+    def tainted_atoms(self, value: Any, typed_only: bool = False, no_weak: Collection[str] = ()) -> list[str]:
         return [a for k, a in extract_atoms(value, typed_only)
                 if not self.is_trusted(k, a, no_weak) and self.untrusted.contains(k, a)]
