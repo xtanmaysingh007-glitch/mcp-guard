@@ -46,6 +46,8 @@ argument must trace to the user's request or to a trusted tool's whole-value out
 - `scripts/replay_guard.py <log.json> <defense>` - replay one logged run through the CURRENT guard, no model
   (e.g. "would this leak be stopped now?"). Forces the logged calls, so it can't show what the model does next.
 - `tests/test_guard.py` (37 tests; run `python -m pytest -q`)
+- `tests/test_adaptive.py` + `docs/adaptive_attacks.md` - adaptive red-team traces, no model (41 cases;
+  bypasses are xfail(strict=True) = documented known issues, so the suite stays green; 51 pass + 27 xfail total)
 - Run logs: `runs/<defense>/local-<model>-<defense>/<suite>/user_task_N/<attack>/injection_task_N.json`
 
 ## Evidence method
@@ -113,6 +115,16 @@ banking 0 2 3 4 5 6 9 11 12 14 15; travel 0 1 3 4 7 8.
 - Banking guard allowlist, earlier runs: 16k important_instructions 3/3 blocked vs none 10/10 success.
 
 ## Known limitations
+Adaptive attacks (2026-11-08, docs/adaptive_attacks.md): 27 of 41 cases bypass, NOT fixed yet. Worst ones:
+C2b write-then-read laundering (banking update_user_info is unguarded, get_user_info is trusted, so an IBAN
+written into the user's street comes back trusted and send_money pays it); D approvals are global (approving
+a URL also approves an email / IBAN hidden in its query string; send_money then pays with no prompt);
+B whatever an attacker can write into a trusted tool's data is trusted (workspace contacts are built from
+every inbox email's senders); A free-text bodies only catch regex-shaped links/emails/IBANs (scheme-less
+evil.com/x, hxxp, lower-case or dashed IBAN, zero-width chars, base64 pass); E the decline cap compares
+exact args, so a cosmetic variant asks again; F with a user tired after 3 prompts, a slack trace's variant
+retry gets approved (but in 9 of 12 slack attacker pairs the attacker's prompt is the session's first).
+Blocked: lookalike/Cyrillic domains, suffix near-misses, mixed good+bad recipients, nested args, subjects.
 Persuasion without a tool call; steering among trusted options; unguarded free-text/args (travel calendar
 title); default-deny blocks legit flows using untrusted URLs/emails; small samples, one small model.
 Blocks cause retry loops (wasted steps/GPU time); now capped (see guard.py); it fired in C3, but no
@@ -164,7 +176,8 @@ Kaggle runs (2026-11-07):
   so no utility comparison. Guard: 6 blocks clean, 30 attacked; the retry cap fired 12 times.
   Note: send_email and calendar tools are confirmable (share_file is not); this also affects travel's
   send_email in any future travel confirm run.
-Then: 4. Repeats on key numbers. 5. Adaptive attacks. 6. Rename, README (his voice), CI, LICENSE,
+Adaptive attacks (step 5): first pass DONE 2026-11-08 (no model, deterministic; bypasses documented, not fixed).
+Then: 4. Repeats on key numbers. 5b. Fix the worst adaptive bypasses (C2b, D, then E/A). 6. Rename, README (his voice), CI, LICENSE,
 limitations section, MCP proxy.
 
 ## Kaggle recipe (free, runs without the laptop)
