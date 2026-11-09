@@ -493,12 +493,13 @@ def test_call_scope_changed_body_asks_again_but_value_scope_does_not():
     assert len(asks) == 1
 
 
-def test_call_scope_same_call_twice_asks_twice():
+def test_call_scope_same_call_twice_asks_once():
+    # P2 (2026-11-10): an exact call approved in a prompt isn't asked again this session (before P2, call
+    # scope asked every time; the model's repeated identical DMs were 19 of 50 slack prompts)
     g, asks = _scoped_guard("call")
-    for _ in range(2):
-        d = g.check_call("send_email", _mail("same"))
-        assert d.allowed and d.asked
-    assert len(asks) == 2
+    first, second = (g.check_call("send_email", _mail("same")) for _ in range(2))
+    assert first.allowed and first.asked and second.allowed and not second.asked
+    assert len(asks) == 1
 
 
 def test_call_scope_approval_ahead_of_time_is_one_use():
@@ -572,3 +573,45 @@ def test_per_tool_scope_values_are_checked():
     import pytest
     with pytest.raises(ValueError):
         Policy(approval_scope_by_tool={"send_email": "forever"})
+
+
+# --- P2: an exact call the user already approved this session is not asked again ---------------------
+
+def _oracle_like(user_query, answer=True):
+    from mcp_guard.agentdojo_adapter import policy_for
+    asks = []
+    g = Guard(policy_for("mcp_guard_confirm_oracle"), confirm_fn=lambda t, a, b: asks.append((t, dict(a))) or answer)
+    g.start_session(user_query)
+    g.observe_output("read_channel_messages", "Charlie was the most active user this week")
+    return g, asks
+
+
+def test_p2_same_dm_approved_once_is_not_asked_again():
+    g, asks = _oracle_like("DM the most active user a congratulation")
+    dm = {"recipient": "Charlie", "body": "Congrats on being the most active user!"}
+    assert g.check_call("send_direct_message", dm).allowed
+    d = g.check_call("send_direct_message", dict(dm))          # the model repeats itself
+    assert d.allowed and not d.asked and len(asks) == 1
+
+
+def test_p2_same_dm_with_changed_body_asks_again():
+    g, asks = _oracle_like("DM the most active user a congratulation")
+    assert g.check_call("send_direct_message", {"recipient": "Charlie", "body": "Congrats!"}).allowed
+    d = g.check_call("send_direct_message", {"recipient": "Charlie", "body": "Congrats again!"})
+    assert d.asked and len(asks) == 2                          # send_direct_message is call scope
+
+
+def test_p2_delete_file_asks_every_time():
+    g, asks = _oracle_like("Delete file 11")
+    for _ in range(2):
+        d = g.check_call("delete_file", {"file_id": "11"})
+        assert d.allowed and d.asked                           # always_confirm: never covered by P2
+    assert len(asks) == 2
+
+
+def test_p2_declined_call_is_still_blocked_without_asking():
+    g, asks = _oracle_like("DM the most active user a congratulation", answer=False)
+    dm = {"recipient": "Charlie", "body": "Congrats!"}
+    assert not g.check_call("send_direct_message", dm).allowed
+    d = g.check_call("send_direct_message", dict(dm))
+    assert not d.allowed and not d.asked and len(asks) == 1

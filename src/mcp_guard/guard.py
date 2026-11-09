@@ -45,7 +45,10 @@ class Guard:
         # Approvals are scoped: a yes covers that exact value in that argument of that tool, nothing more.
         # (They used to become "user-given" everywhere, so approving a link also approved an IBAN inside it.)
         self.approved: set[tuple[str, str, str]] = set()  # (tool, arg, canonical atom)
-        self.approved_calls: set[str] = set()             # EXACT call keys the user said yes to
+        # Calls the user said yes to in a prompt (approval_key: tool + canonical args). The same call again is
+        # not asked again in this session (any changed argument is a different call), except always_confirm
+        # tools, which ask every time. Approvals given ahead of time (approve_call) stay one-use.
+        self.approved_calls: set[str] = set()
         self.declines = 0                                 # calls the user declined this session
         # approval_scope "call": approvals given ahead of the call (approve_call), one use each, with expiry
         self.call_approvals: dict[str, int] = {}          # approval key -> last call number it is valid for
@@ -67,11 +70,6 @@ class Guard:
             self.prov.add_trusted(output, weak=tool in self.policy.weak_trusted_tools)
         else:
             self.prov.add_untrusted(output)
-
-    @staticmethod
-    def _call_key(tool: str, args: dict[str, Any]) -> str:
-        """Exact key: used for "the user already said yes to exactly this call"."""
-        return tool + json.dumps(args, sort_keys=True, default=str)
 
     @staticmethod
     def _retry_key(tool: str, args: dict[str, Any]) -> str:
@@ -137,11 +135,11 @@ class Guard:
         # always_confirm tools (e.g. delete_file) have no argument we can trace: deleting file "13" looks the
         # same whether the user or an injection asked for it. So they always go to the user, or are blocked.
         always = tool in self.policy.always_confirm
-        exact, key = self._call_key(tool, args), self._retry_key(tool, args)
+        key = self._retry_key(tool, args)
         if (bad or always) and self._use_call_approval(tool, args):
             d = Decision(True, tool, "approved by user (approved ahead of the call)", bad, approved=True)
-        elif (bad or always) and exact in self.approved_calls:
-            d = Decision(True, tool, "approved by user (same call as before)", bad)
+        elif bad and not always and self.approval_key(tool, args) in self.approved_calls:
+            d = Decision(True, tool, "approved by user (same call approved earlier this session)", bad)
         elif bad or always:
             names = ", ".join(f"{a}={v}" for a, v in bad.items())
             if self.refused.get(key, 0) >= 1 and self.confirm_fn is not None:
@@ -155,10 +153,10 @@ class Guard:
             elif self.confirm_fn is not None and (always or tool in self.policy.confirmable):
                 if self.confirm_fn(tool, args, bad):
                     if self.policy.scope_for(tool) == "value":
-                        # the yes keeps covering these values (and this exact call) for the session
+                        # the yes keeps covering these values for the session
                         self._remember_approval(tool, args, bad)
-                        self.approved_calls.add(exact)
-                    # scope "call": the yes is used up by this very call; nothing is remembered
+                    # both scopes: this exact call isn't asked again (call scope: only this exact call)
+                    self.approved_calls.add(self.approval_key(tool, args))
                     d = Decision(True, tool, "approved by user", bad, asked=True, approved=True)
                 else:
                     self.refused[key] = self.refused.get(key, 0) + 1
