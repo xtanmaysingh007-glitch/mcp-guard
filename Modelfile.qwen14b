@@ -1,0 +1,6 @@
+FROM qwen2.5:14b
+PARAMETER num_ctx 16384
+PARAMETER temperature 0
+# Cap each reply. At temperature 0 the model can fall into a repetition loop, and without a cap
+# Ollama keeps generating forever (context shifting). Normal replies are far shorter than this.
+PARAMETER num_predict 2048
