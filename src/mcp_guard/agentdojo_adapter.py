@@ -5,6 +5,7 @@ import json
 from ast import literal_eval
 from collections.abc import Sequence
 
+import openai
 from agentdojo.agent_pipeline.agent_pipeline import TOOL_FILTER_PROMPT, AgentPipeline, load_system_message
 from agentdojo.agent_pipeline.base_pipeline_element import BasePipelineElement
 from agentdojo.agent_pipeline.basic_elements import InitQuery, SystemMessage
@@ -20,6 +21,33 @@ from agentdojo.types import ChatMessage, ChatToolResultMessage, text_content_blo
 
 from .guard import Guard
 from .policy import TRUST_SETTINGS, DEFAULT_POLICY_PATH, Policy
+
+
+REPEAT_LIMIT_NOTE = "[stopped: the model got stuck repeating itself (Ollama: token repeat limit reached)]"
+
+
+class StopOnRepeatLimit(BasePipelineElement):
+    """Wraps the LLM. If Ollama aborts a reply because the model is looping ("token repeat limit reached"),
+    the task ends right there with a note, instead of the exception killing the whole run.
+
+    Why: at temperature 0 the same loop comes back on every retry, so one stuck reply used to crash run_batch
+    6 times in a row and stop the defense (F7, 2026-11-09: user_task_4 x injection_task_9). The note is a
+    normal final answer (no tool calls), so the pair is logged and scored like any task the model gave up on.
+    Every other error is raised as before. Count these with REPEAT_LIMIT_NOTE when scoring."""
+
+    def __init__(self, llm: BasePipelineElement):
+        self.llm = llm
+        self.name = getattr(llm, "name", None)
+
+    def query(self, query, runtime, env=EmptyEnv(), messages=[], extra_args={}):
+        try:
+            return self.llm.query(query, runtime, env, messages, extra_args)
+        except openai.InternalServerError as e:
+            if "repeat limit" not in str(e):
+                raise
+            note = {"role": "assistant", "content": [text_content_block_from_string(REPEAT_LIMIT_NOTE)],
+                    "tool_calls": None}
+            return query, runtime, env, [*messages, note], extra_args
 
 
 class GuardSessionStart(BasePipelineElement):
@@ -144,6 +172,8 @@ def build_pipeline(llm: OpenAILLM | BasePipelineElement, name: str, defense: str
     """Returns (pipeline, guard_or_None). `name` must contain an agentdojo.models.MODEL_NAMES key."""
     sys_msg = load_system_message(None)
     guard = None
+    raw_llm = llm
+    llm = StopOnRepeatLimit(raw_llm)       # a looping model ends its own task, not the run
 
     if defense in GUARD_DEFENSES:
         guard = Guard(policy_for(defense, policy_path), confirm_fn=CONFIRM_USERS.get(defense))
@@ -160,10 +190,10 @@ def build_pipeline(llm: OpenAILLM | BasePipelineElement, name: str, defense: str
         elements = [SystemMessage(sys_msg), InitQuery(), llm,
                     ToolsExecutionLoop([ToolsExecutor(), InitQuery(), llm])]
     elif defense == "tool_filter":
-        if not isinstance(llm, OpenAILLM):
+        if not isinstance(raw_llm, OpenAILLM):
             raise ValueError("tool_filter needs an OpenAI-compatible LLM")
         # AgentDojo passes the pipeline *name* as the model id; we pass the real model id instead.
-        elements = [SystemMessage(sys_msg), InitQuery(), OpenAILLMToolFilter(TOOL_FILTER_PROMPT, llm.client, llm.model),
+        elements = [SystemMessage(sys_msg), InitQuery(), OpenAILLMToolFilter(TOOL_FILTER_PROMPT, raw_llm.client, raw_llm.model),
                     llm, ToolsExecutionLoop([ToolsExecutor(), llm])]
     else:
         raise ValueError(f"defense must be one of {DEFENSES}")

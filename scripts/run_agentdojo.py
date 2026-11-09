@@ -95,6 +95,16 @@ def preflight_ollama(client, model: str) -> None:
                          "Create it with: ollama create qwen2.5-7b-16k -f Modelfile.qwen7b")
 
 
+def no_retry_on_repeat_limit(response: httpx.Response) -> None:
+    """Ollama answers a looping model with HTTP 500 "token repeat limit reached". At temperature 0 a retry
+    loops the same way, so tell the openai client not to retry it (it would try 4 more times). The pipeline
+    then ends that task with a note (StopOnRepeatLimit in agentdojo_adapter.py)."""
+    if response.status_code == 500:
+        response.read()
+        if "repeat limit" in response.text:
+            response.headers["x-should-retry"] = "false"
+
+
 def build_llm(provider: str, ollama_model: str | None = None):
     """Returns (llm_element, pipeline_name). The pipeline name must contain a key from
     agentdojo.models.MODEL_NAMES because attacks look up how to address the model by it.
@@ -126,6 +136,7 @@ def build_llm(provider: str, ollama_model: str | None = None):
             # (Ollama being briefly down is covered by run_batch's own retries, not by these.)
             timeout=300,
             max_retries=4,
+            http_client=httpx.Client(event_hooks={"response": [no_retry_on_repeat_limit]}),
         )
         preflight_ollama(client, model)
         llm = OpenAILLM(client, model)
