@@ -1,0 +1,2 @@
+# MCP proxy only (python -m mcp_guard.proxy). Not needed for the AgentDojo runs.
+mcp>=2.3,<3

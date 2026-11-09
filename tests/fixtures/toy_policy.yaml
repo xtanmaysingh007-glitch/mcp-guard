@@ -1,0 +1,20 @@
+# Policy for tests/toy_mcp_server.py, written the way `python -m mcp_guard init` asks: start from the
+# skeleton (every tool unclassified, unknown_tools block), then move each tool into its sections.
+unknown_tools: block
+strict_trust: typed
+approval_scope: call
+
+trusted_tools: []          # the inbox is NOT trusted: anyone can email the user
+weak_trusted_tools: []
+safe_tools: [read_inbox]   # read-only, nothing to guard (its output is still untrusted data)
+forbid_tainted:
+  send_email: [recipients]
+  get_webpage: [url]       # a URL can carry data out in its path or query
+check_links_in:
+  send_email: [body]
+outward_args:
+  send_email: [recipients]
+  get_webpage: [url]
+confirmable: [send_email, get_webpage]
+always_confirm: []
+user_identities: []
