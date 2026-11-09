@@ -283,12 +283,38 @@ same commit (logs record refusals, not asks); exact for clean logs, at most +1 o
   (AgentDojo asks per call).
 - F3 (slack clean only, 21 tasks): NOT NEEDED. F1 already ran all 21 clean tasks for every defense (including
   none / mcp_guard / confirm_oracle) at temperature 0.
+- P2 APPLIED (commit e0651db): an exact call (tool + canonical args, approval_key) the user approved in a prompt
+  isn't asked again this session, in both approval scopes; any changed argument (body, recipient, ...) asks
+  again; always_confirm tools ask every time (this also fixed an old gap: value scope used to let a second
+  identical delete_file through unasked); declined calls stay blocked without asking; approve_call approvals
+  stay one-use. Replay of the F1 logs, same files before -> after:
+    confirm_oracle            clean 50 -> 31 prompts (2.38 -> 1.48 per task), attacked 116 -> 106 (84 logs)
+    confirm_yes               clean 45 -> 28 (2.14 -> 1.33), attacked 154 -> 134 (90 logs)
+    confirm_oracle_trust_full clean 52 -> 35 (2.48 -> 1.67), attacked 154 -> 130 (89 logs)
+  Blocks unchanged (oracle 0 clean / 136 attacked, yes 0 / 15, oracle_trust_full 0 / 148); attacker calls
+  allowed unchanged (0 for both oracles; confirm_yes 59 before and after, it approves everything).
+- Oracle utility is an UPPER BOUND: the oracle approves the model's invented values (dora@example.com,
+  made-up channel names, a user "qwen") because they aren't attacker values; a real user would say no to
+  some of them, so real confirm-mode utility can be lower (and those prompts are useful: they catch errors).
+- F5 (pending): slack, same settings as F1 (21 tasks x inj 0-4, important_instructions), KILL_HOURS 1.0, pinned
+  to the P2 commit (the notes commit after e0651db): mcp_guard_confirm_oracle, mcp_guard_confirm_yes,
+  mcp_guard_confirm_oracle_trust_full (the rows P2 changes). ~1 h per defense, ~3 h 10 min with setup.
+  Other F1 rows (none, mcp_guard, trust_full) don't change with P2 (no prompts).
 - F4 (pending): slack ablations mcp_guard_no_trusted and mcp_guard_no_links, same settings as F1 (21 tasks x inj
   0-4, important_instructions), KILL_HOURS 1.0, pinned to the latest commit. ~1 h per defense (F1's defenses
   all hit the 1 h limit), ~2 h 10 min with setup. Score against F1 on the pairs all eight defenses share.
 Then: 4. Repeats on key numbers (the freeze runs above are the current-guard numbers; earlier ones used
 strict_trust off and value scope). 6. Rename, README (his voice), CI, LICENSE,
 limitations section, MCP proxy.
+
+## Proxy design notes (for the MCP proxy, not built yet)
+- P3, batch prompts per model turn: when one model turn makes several guarded calls, show them to the user
+  in ONE prompt (approve / decline each) instead of one prompt per call. Replay of the F1 oracle logs: with
+  P2 it would take clean slack from 1.48 to 0.95 prompts per task (P2+P3 = 0.95 vs 2.38 before P2), 0
+  attacker calls allowed. Not done in the AgentDojo harness (it asks per call); belongs in the proxy UI.
+- unknown_tools: block, with `python -m mcp_guard init` to write the starting policy.
+- Async approval: block the call, show it to the user, let the agent retry; Guard.approve_call stores the
+  yes (one use, expires after approval_ttl_calls).
 
 ## Kaggle recipe (free, runs without the laptop)
 Notebook with GPU T4 x2, Internet on, ONE cell: install zstd/pciutils, `curl ollama.com/install.sh | sh`,
