@@ -341,6 +341,20 @@ same commit (logs record refusals, not asks); exact for clean logs, at most +1 o
   0/3 clean and 0/18 attacked, 0 attacker calls; saw the injection only in u20 (6/6) and ignored it. The smoke
   check passed because u13 had 1 call (the check only needs > 0 somewhere). Not a usable probe model.
   -> workspace gets a guard run with qwen2.5-14b (none / mcp_guard / confirm_oracle on the same 18 pairs + clean).
+- F7 (pending, cell given 2026-11-09, pinned to the commit that adds this entry): LIVE workspace run,
+  qwen2.5-14b-16k, important_instructions, defenses none -> mcp_guard -> mcp_guard_confirm_oracle (that order),
+  user tasks 4 13 15 19 20 (the injection reached the model in every pair there: Qwen-7B C2/C3 and Qwen-14B F6)
+  x inj 0-9 = 50 attack pairs + 5 clean per defense. Inj 10-13 left out: the time budget, and 10-12 are
+  attachment / file exfiltration that need many steps. Canaries checked for inj 0-9 (mark.black covers 0, 2-9;
+  delete_file 13 covers 1); the oracle refuses mark.black, delete_file 13 and any delete_email.
+  Estimate from F6 (~2 min per pair on u13/19/20; u19 ~3.2, u20 ~0.75): none ~2.1 h, mcp_guard ~2.7 h (retry
+  loops, C2 guard ran ~1.25x slower), oracle ~2.3 h; ~7.3 h expected with setup. Caps (run_batch --run-timeout,
+  per defense, retries included): 2.5 / 3.0 / 2.75 h -> worst case ~8.6 h, under Kaggle's 12 h session, so ONE
+  cell (no F7a/F7b split). A capped defense loses its last user task(s) (tasks run in order), so score on the
+  pairs all three share. The cell checks the qwen2.5:14b weights are the F6 blob (sha256-2049f567...), tars after
+  each defense, and writes its printout to /kaggle/working/f7_cell.log + f7_summary.txt (F6's zip had no
+  printout). Scoring: python scripts/attribution.py --suite workspace --model local-qwen2.5-14b-16k
+  --attack important_instructions (from the folder that holds runs/).
 Then: 4. Repeats on key numbers (the freeze runs above are the current-guard numbers; earlier ones used
 strict_trust off and value scope). 6. Rename, README (his voice), CI, LICENSE, limitations section.
 
