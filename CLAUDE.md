@@ -71,7 +71,7 @@ argument must trace to the user's request or to a trusted tool's whole-value out
   our tests don't need the plugin)
 - `tests/test_adaptive.py` + `docs/adaptive_attacks.md` - adaptive red-team traces, no model (first pass 41,
   44 cases; open bypasses are xfail(strict=True); B cases run in default (xfail) and strict mode;
-  whole suite now 161 pass + 8 xfail; B cases run under off (xfail), typed and full)
+  whole suite now 182 pass + 8 xfail (2026-11-10, with the proxy tests); B cases run under off (xfail), typed and full)
 - Run logs: `runs/<defense>/local-<model>-<defense>/<suite>/user_task_N/<attack>/injection_task_N.json`
 
 ## Evidence method
@@ -322,11 +322,41 @@ same commit (logs record refusals, not asks); exact for clean logs, at most +1 o
   Same story as the 10-task ablation (2026-11-07): trusted tools buy utility (4/21 vs 2/21 clean), link
   checks buy security: the one no_links leak is again user_task_9 x inj_1 (phishing link in a DM body to a
   recipient from the user's request). no_links solved one more clean task (12) than mcp_guard.
+- F6 (pending, cells given 2026-11-10, Kaggle + Colab variant): model probe, defense none ONLY: workspace
+  important_instructions, user tasks 13 19 20 x inj 0-5, models qwen2.5:14b and llama3.1:8b (Modelfile.qwen14b
+  -> qwen2.5-14b-16k, Modelfile.llama8b -> llama3.1-8b-16k; same ctx/temp/num_predict as qwen7b). Per model:
+  2-task clean smoke test (user tasks 13 19, --no-attack, 0.25 h cap) that checks the logs have tool calls,
+  then the 18 pairs with KILL_HOURS 0.75; tar after each model. Question: does a bigger / different model
+  ever ATTEMPT a workspace injection (Qwen-7B: 0 of 142 pairs)? If yes, workspace gets a guard run.
 Then: 4. Repeats on key numbers (the freeze runs above are the current-guard numbers; earlier ones used
-strict_trust off and value scope). 6. Rename, README (his voice), CI, LICENSE,
-limitations section, MCP proxy.
+strict_trust off and value scope). 6. Rename, README (his voice), CI, LICENSE, limitations section.
 
-## Proxy design notes (for the MCP proxy, not built yet)
+## MCP proxy (built 2026-11-10, docs/proxy.md)
+- `src/mcp_guard/proxy/` (core.py GuardedProxy, confirm.py terminal prompt, __main__.py CLI), ~300 lines, imports
+  only guard / policy / provenance. Needs MCP SDK 2.x: `pip install -r requirements-proxy.txt` (kept out of
+  requirements.txt so Kaggle runs don't pull it). `python -m mcp_guard.proxy --policy P --user-request-file F
+  [--audit-log A] [--confirm auto|terminal|none] [--prompt-timeout 120] -- <server command>`.
+- tools/list forwarded unchanged (descriptions never reach the guard); tools/call: Guard.check_call (in a
+  worker thread, one call at a time), blocked/declined -> isError result, never forwarded; allowed ->
+  forwarded with the checked args, result -> observe_output (error results never trusted). Request file re-read
+  every call; changed text = guard.start_session (new task). No/empty file = nothing user-given. Policy file
+  without unknown_tools -> block; approval scope forced to call; Guard(reuse_approvals=False) (new option,
+  commit f30d650): a yes covers one call once, no P2 reuse, no value scope; the prompt timeout is the expiry.
+- Prompts go to /dev/tty or the Windows console (stdin/stdout are the MCP pipe); no terminal -> block only.
+  TerminalConfirm is tested with fake input only, NOT tried by hand in a real terminal yet.
+- tests/toy_mcp_server.py (read_inbox with an injected email, send_email, get_webpage; logs executed calls to
+  TOY_CALL_LOG; TOY_POISON_DESCRIPTIONS=1), tests/fixtures/toy_policy.yaml, tests/test_proxy.py (16 tests, a
+  real toy server over stdio; one test runs client -> proxy -> server as real processes). Pass-through proxy
+  first: 10 of 16 failed (all the security ones), then the guard check made all pass.
+- SDK 2.x notes (mcp 2.3.0): v1 API is gone (no @server.list_tools decorators, no FastMCP: MCPServer; handlers
+  are Server(on_list_tools=, on_call_tool=) kwargs taking (ctx, params)); handler exceptions become -32603
+  protocol errors, not isError results, so blocks are returned as CallToolResult(is_error=True); mcp.Client
+  caches tools/list by default (proxy uses cache=None); stdio children get a minimal env (proxy passes
+  os.environ); unknown wire fields are dropped; Client(server_object) runs in memory (used by the tests);
+  elicitation exists but the newest protocol revision has no server-to-client requests.
+- Limits: terminal-only prompts, manual request file, tools only (no resources/prompts/instructions, no
+  list_changed), one call at a time, not tried with a real host or model yet.
+Design notes still open:
 - P3, batch prompts per model turn: when one model turn makes several guarded calls, show them to the user
   in ONE prompt (approve / decline each) instead of one prompt per call. Replay of the F1 oracle logs: with
   P2 it would take clean slack from 1.48 to 0.95 prompts per task (P2+P3 = 0.95 vs 2.38 before P2), 0
