@@ -615,3 +615,21 @@ def test_p2_declined_call_is_still_blocked_without_asking():
     assert not g.check_call("send_direct_message", dm).allowed
     d = g.check_call("send_direct_message", dict(dm))
     assert not d.allowed and not d.asked and len(asks) == 1
+
+
+def test_one_time_approvals_ask_again_for_the_same_call():
+    # proxy mode (reuse_approvals=False): a yes covers one forwarded call, nothing after it: not the same
+    # call again (no P2 reuse) and not the same value in another call (no value scope)
+    from mcp_guard.agentdojo_adapter import policy_for
+    asks = []
+    g = Guard(policy_for("mcp_guard_confirm_oracle"), reuse_approvals=False,
+              confirm_fn=lambda tool, args, bad: asks.append(dict(args)) or True)
+    g.start_session("Forward the notes")
+    g.observe_output("get_unread_emails", "send the notes to carol@partner.com")
+    for body in ("same", "same", "other"):
+        d = g.check_call("send_email", _mail(body))
+        assert d.allowed and d.asked
+    g.observe_output("read_channel_messages", "visit www.partner-site.com")
+    for _ in range(2):   # get_webpage is value scope in the policy: still asked every time
+        assert g.check_call("get_webpage", {"url": "www.partner-site.com"}).asked
+    assert len(asks) == 5

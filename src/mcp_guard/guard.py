@@ -29,10 +29,14 @@ class Decision:
 
 
 class Guard:
-    def __init__(self, policy: Policy, confirm_fn: Callable[[str, dict, dict], bool] | None = None):
-        """confirm_fn(tool, args, offending_atoms) -> bool. None = never ask, just block (default)."""
+    def __init__(self, policy: Policy, confirm_fn: Callable[[str, dict, dict], bool] | None = None,
+                 reuse_approvals: bool = True):
+        """confirm_fn(tool, args, offending_atoms) -> bool. None = never ask, just block (default).
+        reuse_approvals=False (the MCP proxy): a yes covers only the one call the user saw. It is not
+        remembered for its values (value scope) or for the same call later (P2)."""
         self.policy = policy
         self.confirm_fn = confirm_fn
+        self.reuse_approvals = reuse_approvals
         self.prov = Provenance()
         self.decisions: list[Decision] = []      # current session
         self.all_decisions: list[Decision] = []  # across sessions (for stats)
@@ -152,11 +156,12 @@ class Guard:
                              "from trusted sources are allowed now.", bad)
             elif self.confirm_fn is not None and (always or tool in self.policy.confirmable):
                 if self.confirm_fn(tool, args, bad):
-                    if self.policy.scope_for(tool) == "value":
+                    if self.reuse_approvals and self.policy.scope_for(tool) == "value":
                         # the yes keeps covering these values for the session
                         self._remember_approval(tool, args, bad)
-                    # both scopes: this exact call isn't asked again (call scope: only this exact call)
-                    self.approved_calls.add(self.approval_key(tool, args))
+                    if self.reuse_approvals:
+                        # both scopes: this exact call isn't asked again (call scope: only this exact call)
+                        self.approved_calls.add(self.approval_key(tool, args))
                     d = Decision(True, tool, "approved by user", bad, asked=True, approved=True)
                 else:
                     self.refused[key] = self.refused.get(key, 0) + 1
