@@ -9,7 +9,8 @@ host  <-stdio->  python -m mcp_guard.proxy  <-stdio->  real MCP server
 ```
 
 It's small (about 300 lines in [src/mcp_guard/proxy/](../src/mcp_guard/proxy/)) and uses only the core
-modules (guard, policy, provenance). It needs the MCP Python SDK 2.x: `pip install -r requirements-proxy.txt`.
+modules (guard, policy, provenance). It needs the MCP Python SDK 2.x: `pip install -e ".[proxy]"` (or `pip install -r requirements-proxy.txt`),
+which also installs the `mcp-guard` command (`mcp-guard init`, `mcp-guard proxy`).
 
 ## What it does
 
@@ -29,7 +30,7 @@ modules (guard, policy, provenance). It needs the MCP Python SDK 2.x: `pip insta
 1. Get the server's tool list (a `tools/list` result saved as JSON) and make a policy skeleton:
 
    ```bash
-   python -m mcp_guard init tools.json -o policy.yaml
+   mcp-guard init tools.json -o policy.yaml
    ```
 
    Every tool starts as `unclassified`, and `unknown_tools: block` means none of them can run until you
@@ -42,7 +43,7 @@ modules (guard, policy, provenance). It needs the MCP Python SDK 2.x: `pip insta
 3. Point the host at the proxy instead of the server. Everything after `--` is the real server's command:
 
    ```bash
-   python -m mcp_guard.proxy --policy policy.yaml --user-request-file request.txt --audit-log audit.jsonl -- python my_server.py
+   mcp-guard proxy --policy policy.yaml --user-request-file request.txt --audit-log audit.jsonl -- python my_server.py
    ```
 
    In a host config file this goes in the server's `command` / `args`.

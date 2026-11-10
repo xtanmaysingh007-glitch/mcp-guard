@@ -520,6 +520,17 @@ Design notes still open:
 - Async approval: block the call, show it to the user, let the agent retry; Guard.approve_call stores the
   yes (one use, expires after approval_ttl_calls).
 
+## Packaging (2026-11-10)
+pyproject.toml (setuptools>=77, SPDX license MIT + LICENSE): package mcp-guard 0.1.0, Python >=3.10, core dep only
+pyyaml>=6,<7; extras: proxy = mcp>=2.3,<3; agentdojo = agentdojo==0.1.35 (pinned: all results), openai>=1.50,<4,
+httpx>=0.27,<1, python-dotenv>=1,<2; test = pytest>=8,<10. Console script mcp-guard = mcp_guard.cli:main
+(subcommands init, proxy; `mcp-guard proxy` without the SDK says how to install it). requirements.txt stays for
+the Kaggle cells. tests/test_cli.py: core imports with agentdojo/mcp/openai made unimportable, proxy without
+agentdojo, help texts, entry point registered, installed command init + proxy end to end. Fresh venv
+`pip install -e ".[proxy,test]"` (no agentdojo): install clean (no warnings), 29 passed / 3 skipped. The 3 skips:
+this laptop's Windows Application Control blocks pip's unsigned mcp-guard.exe launcher (WinError 4551, also from
+PowerShell); the tests skip ONLY on that error; CI runs them on clean runners.
+
 ## Kaggle recipe (free, runs without the laptop)
 Notebook with GPU T4 x2, Internet on, ONE cell: install zstd/pciutils, `curl ollama.com/install.sh | sh`,
 start server with `subprocess.Popen("nohup ollama serve > /kaggle/working/ollama.log 2>&1 &", shell=True,
