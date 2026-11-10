@@ -1,6 +1,6 @@
-"""`python -m mcp_guard init tools.json -o policy.yaml` (see init_policy.py)."""
+"""`python -m mcp_guard ...` = the `mcp-guard` command (cli.py): `init` and `proxy`."""
 import sys
 
-from .init_policy import main
+from .cli import main
 
 sys.exit(main())

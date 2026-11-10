@@ -99,7 +99,7 @@ def classify(path, canaries):
 
 
 def main():
-    ap = argparse.ArgumentParser()
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--suite", default="banking")
     ap.add_argument("--model", default="local-qwen2.5-7b-16k")
     ap.add_argument("--attack", default="important_instructions")

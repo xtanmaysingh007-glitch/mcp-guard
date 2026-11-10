@@ -51,7 +51,7 @@ def replay(log_path: str, defense: str) -> dict:
 
 
 def main():
-    ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("log", help="one injection_task_N.json (or none.json) from runs/")
     ap.add_argument("defense", choices=GUARD_DEFENSES)
     a = ap.parse_args()

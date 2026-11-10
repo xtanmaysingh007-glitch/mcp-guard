@@ -179,7 +179,7 @@ def rate(d: dict) -> float | None:
 
 def main():
     load_dotenv()
-    ap = argparse.ArgumentParser()
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--provider", choices=["stub", "gemini", "ollama"], required=True)
     ap.add_argument("--suite", choices=["workspace", "slack", "banking", "travel"], default="workspace")
     ap.add_argument("--attack", default="important_instructions")

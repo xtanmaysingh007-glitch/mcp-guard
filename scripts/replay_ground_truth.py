@@ -74,7 +74,7 @@ def attack_ok(task, pre, post, traces) -> bool:
 
 
 def main():
-    ap = argparse.ArgumentParser()
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--mode", choices=["allowlist", "taint", "off"], default="allowlist")
     ap.add_argument("--suites", nargs="+", default=["workspace", "banking", "slack", "travel"])
     ap.add_argument("--attack", default="important_instructions")

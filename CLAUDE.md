@@ -72,7 +72,7 @@ argument must trace to the user's request or to a trusted tool's whole-value out
   our tests don't need the plugin)
 - `tests/test_adaptive.py` + `docs/adaptive_attacks.md` - adaptive red-team traces, no model (first pass 41,
   44 cases; open bypasses are xfail(strict=True); B cases run in default (xfail) and strict mode;
-  whole suite now 220 pass + 8 xfail (2026-11-10, incl. proxy, repeat-limit, parity, repeatability, freeze-clock); B cases run under off (xfail), typed and full)
+  whole suite now 238 pass + 3 skip + 8 xfail (2026-11-10; without AgentDojo: 75 pass, 25 skip); B cases run under off (xfail), typed and full)
 - Run logs: `runs/<defense>/local-<model>-<defense>/<suite>/user_task_N/<attack>/injection_task_N.json`
 
 ## Evidence method
@@ -561,6 +561,17 @@ read-only tool 53 / 83 us; confirm mode, instant yes, asked every call 249 / 398
 processes, stdio, toy server, 500 calls per tool): direct ~3.1 ms median, through the proxy ~7.9 ms, so ~4.8 ms
 added per call (p95 10.0 vs 4.0 ms); most of it is the extra process hop and JSON-RPC both ways, not the check.
 One machine, one run; a human answering a prompt dwarfs all of this.
+
+## Cleanup (2026-11-10)
+docs/settings.md: every policy setting with its built-in / AgentDojo / `mcp-guard init` default and why, the
+fixed constants (PLAIN_BLOCK_RETRIES, MAX_DECLINES) and what the proxy overrides. Note: a policy file WITHOUT
+strict_trust falls back to off (built-in), while agentdojo.yaml and the init skeleton say typed; left as is
+(changing the fallback changes Policy() behaviour), documented: set it explicitly. Removed dead code:
+scripts/run_baseline.py (deprecated shim, unreferenced) and an unused agentdojo_clock.is_frozen; an AST scan of
+src/ and scripts/ found nothing else unreferenced. Every script's --help now shows its docstring;
+`python -m mcp_guard` = the mcp-guard command (init + proxy). Final full pass (with AgentDojo installed):
+238 passed, 3 skipped (WDAC-blocked launcher), 8 xfailed (known gaps), 1 warning (AgentDojo's own, from the
+repeat_user_prompt defense re-adding the query).
 
 ## Kaggle recipe (free, runs without the laptop)
 Notebook with GPU T4 x2, Internet on, ONE cell: install zstd/pciutils, `curl ollama.com/install.sh | sh`,

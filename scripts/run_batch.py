@@ -54,7 +54,7 @@ def unload_models() -> None:
 
 
 def main():
-    ap = argparse.ArgumentParser()
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--provider", default="ollama")
     ap.add_argument("--suite", default="banking")
     ap.add_argument("--defenses", nargs="+", default=["none", "mcp_guard"])

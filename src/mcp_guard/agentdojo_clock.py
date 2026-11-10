@@ -75,10 +75,6 @@ def unfreeze_clock() -> None:
     _frozen = False
 
 
-def is_frozen() -> bool:
-    return _frozen
-
-
 def reset_clock() -> None:
     """Start the frozen clock over (a no-op for the real clock)."""
     global _ticks

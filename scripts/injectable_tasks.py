@@ -51,7 +51,7 @@ def injectable_tasks(suite_name: str, attack_name: str, guarded: set[str]):
 
 
 def main():
-    ap = argparse.ArgumentParser()
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--suites", nargs="+", default=["workspace", "slack", "banking", "travel"])
     ap.add_argument("--attack", default="important_instructions")
     a = ap.parse_args()
