@@ -678,3 +678,25 @@ def test_value_sources_say_where_each_guarded_value_came_from():
                                  "zed@nowhere.com": "nowhere"}
     assert src["body"] == {"evil.example/a": "untrusted tool output"}     # URLs compare without the scheme
     assert g.check_call("send_email", dict(args)).tainted == before
+
+
+def test_strict_trust_is_fail_safe_when_a_policy_leaves_it_out(tmp_path):
+    """A policy file without strict_trust used to load as "off" (weak trusted tools fully trusted, the B1-B3
+    bypasses open). The fallback is now the project default, typed; "off" has to be asked for explicitly."""
+    from mcp_guard.policy import Policy
+    missing = tmp_path / "p.yaml"
+    missing.write_text("trusted_tools: [search_contacts]\nweak_trusted_tools: [search_contacts]\n"
+                       "forbid_tainted: {send_email: [recipients]}\noutward_args: {send_email: [recipients]}\n")
+    assert Policy.from_yaml(missing).strict_trust == "typed"
+    assert Policy().strict_trust == "typed"
+    explicit = tmp_path / "off.yaml"
+    explicit.write_text(missing.read_text() + "strict_trust: off\n")
+    assert Policy.from_yaml(explicit).strict_trust == "off"
+    empty = tmp_path / "empty.yaml"                      # key written but no value: also fail-safe
+    empty.write_text(missing.read_text() + "strict_trust:\n")
+    assert Policy.from_yaml(empty).strict_trust == "typed"
+    # and it matters: an attacker-written contact address is not a valid recipient under the fallback
+    g = Guard(Policy.from_yaml(missing))
+    g.start_session("Email Bob the notes")
+    g.observe_output("search_contacts", "Bob <evil@attacker.com>")
+    assert not g.check_call("send_email", {"recipients": ["evil@attacker.com"]}).allowed

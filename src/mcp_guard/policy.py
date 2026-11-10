@@ -33,7 +33,9 @@ class Policy:
     user_identities: list[str] = field(default_factory=list)  # the user's own addresses etc.: count as user-given
     weak_trusted_tools: set[str] = field(default_factory=set)  # trusted tools whose data an attacker can write
     outward_args: dict[str, list[str]] = field(default_factory=dict)  # tool -> args that send/pay/invite/visit
-    strict_trust: str = "off"  # off / typed / full, see TRUST_SETTINGS
+    # off / typed / full, see TRUST_SETTINGS. Fail-safe default (2026-11-11): typed, the project default, so a
+    # policy that forgets the key doesn't silently trust weak tools for outward args. "off" must be explicit.
+    strict_trust: str = "typed"
     unknown_tools: str = "allow"  # allow / block, see UNKNOWN_SETTINGS
     safe_tools: set[str] = field(default_factory=set)  # listed on purpose: read-only, nothing to guard
     approval_scope: str = "value"  # value / call, see APPROVAL_SCOPES: the default for every tool ...
@@ -68,7 +70,7 @@ class Policy:
             user_identities=[str(v) for v in (data.get("user_identities") or [])],
             weak_trusted_tools=set(data.get("weak_trusted_tools") or []),
             outward_args={k: list(v) for k, v in (data.get("outward_args") or {}).items()},
-            strict_trust=_trust_setting(data.get("strict_trust", "off")),
+            strict_trust=_trust_setting(data.get("strict_trust", "typed")),   # missing key: fail-safe
             unknown_tools=str(data.get("unknown_tools", "allow")),
             safe_tools=set(data.get("safe_tools") or []),
             approval_scope=str(data.get("approval_scope", "value")),
@@ -115,10 +117,13 @@ class Policy:
 
 
 def _trust_setting(value) -> str:
-    """YAML may say true/false (older files): true = full, false = off."""
+    """YAML may say true/false (older files): true = full, false = off. An empty value (the key with nothing
+    after it) is the fail-safe default, typed, like a missing key."""
     if value is True:
         return "full"
-    if value is False or value is None:
+    if value is None:
+        return "typed"
+    if value is False:
         return "off"
     return str(value)
 

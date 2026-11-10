@@ -72,7 +72,7 @@ argument must trace to the user's request or to a trusted tool's whole-value out
   our tests don't need the plugin)
 - `tests/test_adaptive.py` + `docs/adaptive_attacks.md` - adaptive red-team traces, no model (first pass 41,
   44 cases; open bypasses are xfail(strict=True); B cases run in default (xfail) and strict mode;
-  whole suite now 238 pass + 3 skip + 8 xfail (2026-11-10; without AgentDojo: 75 pass, 25 skip); B cases run under off (xfail), typed and full)
+  whole suite now 240 pass + 3 skip + 10 xfail (2026-11-11, incl. G1/G2 message to self; without AgentDojo: 75 pass, 25 skip); B cases run under off (xfail), typed and full)
 - Run logs: `runs/<defense>/local-<model>-<defense>/<suite>/user_task_N/<attack>/injection_task_N.json`
 
 ## Evidence method
@@ -596,9 +596,11 @@ One machine, one run; a human answering a prompt dwarfs all of this.
 
 ## Cleanup (2026-11-10)
 docs/settings.md: every policy setting with its built-in / AgentDojo / `mcp-guard init` default and why, the
-fixed constants (PLAIN_BLOCK_RETRIES, MAX_DECLINES) and what the proxy overrides. Note: a policy file WITHOUT
-strict_trust falls back to off (built-in), while agentdojo.yaml and the init skeleton say typed; left as is
-(changing the fallback changes Policy() behaviour), documented: set it explicitly. Removed dead code:
+fixed constants (PLAIN_BLOCK_RETRIES, MAX_DECLINES) and what the proxy overrides. strict_trust fallback FIXED
+2026-11-11 (commit after 182d329, tests/test_guard.py::test_strict_trust_is_fail_safe..., red first): a policy
+file that leaves strict_trust out, or writes it with no value, and Policy() now get typed (fail-safe); before,
+they silently got off. off needs `strict_trust: off` / `false`. No frozen number changes: agentdojo.yaml and
+the toy policy set typed explicitly, and no other test relied on the off fallback. Removed dead code:
 scripts/run_baseline.py (deprecated shim, unreferenced) and an unused agentdojo_clock.is_frozen; an AST scan of
 src/ and scripts/ found nothing else unreferenced. Every script's --help now shows its docstring;
 `python -m mcp_guard` = the mcp-guard command (init + proxy). Final full pass (with AgentDojo installed):

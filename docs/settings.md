@@ -14,7 +14,7 @@ The proxy (`mcp-guard proxy`) also overrides a few things on top of the file, li
 | `mode` | `allowlist` | `allowlist` | `allowlist` |
 | `trusted_tools` | none | user's own account data, calendars, contacts, directories (see file) | none (you decide) |
 | `weak_trusted_tools` | none | contacts, channel/user lists, travel directories | none |
-| `strict_trust` | `off` | `typed` | `typed` |
+| `strict_trust` | `typed` | `typed` | `typed` |
 | `forbid_tainted` | none | recipients, payees, URLs, participants, ... | none |
 | `check_links_in` | none | email / message bodies | none |
 | `outward_args` | none | where data, money or access leaves | none |
@@ -45,10 +45,11 @@ ordinary arguments; `strict_trust` decides about outward ones.
 
 **`strict_trust`** (`off` / `typed` / `full`). How far weak trusted values count for outward arguments: `off`
 fully, `typed` not for emails / URLs / IBANs (plain names like a channel still pass), `full` not at all.
-The built-in fallback is `off` (older policies and code that builds `Policy()` keep their behaviour); the AgentDojo
-file and the `init` skeleton both say `typed`, the project default since 2026-11-09: it blocked all four
-adaptive "weak trust" attacks (B1-B3) at the cost of one workspace task, while `full` dropped slack utility
-from 11/21 to 4/21 (perfect agent). **Set it explicitly in any new policy.**
+`typed` is the project default since 2026-11-09: it blocked all four adaptive "weak trust" attacks (B1-B3) at
+the cost of one workspace task, while `full` dropped slack utility from 11/21 to 4/21 (perfect agent). It is
+also the fail-safe fallback since 2026-11-11: a policy file that leaves the key out, or writes it with no
+value, gets `typed` (before, it silently got `off`). `off` must be written explicitly (`strict_trust: off`
+or `false`).
 
 **`forbid_tainted`** (tool -> argument names). The arguments that are checked. Default empty, because which
 arguments matter is tool-specific. ID-style arguments (file_id, email_id) are deliberately not here: an ID
