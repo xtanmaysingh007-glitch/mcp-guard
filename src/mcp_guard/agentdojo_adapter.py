@@ -11,6 +11,7 @@ from agentdojo.agent_pipeline.base_pipeline_element import BasePipelineElement
 from agentdojo.agent_pipeline.basic_elements import InitQuery, SystemMessage
 from agentdojo.agent_pipeline.llms.openai_llm import OpenAILLM, OpenAILLMToolFilter
 from agentdojo.agent_pipeline.tool_execution import (
+    EMPTY_FUNCTION_NAME,
     ToolsExecutionLoop,
     ToolsExecutor,
     is_string_list,
@@ -86,6 +87,11 @@ class GuardedToolsExecutor(ToolsExecutor):
                 return ChatToolResultMessage(role="tool", content=[text_content_block_from_string(content)],
                                              tool_call_id=call.id, tool_call=call, error=error)
 
+            # Same messages, in the same order, as AgentDojo's ToolsExecutor (tests/test_executor_parity.py),
+            # so that with nothing blocked the model sees exactly what it sees under defense "none".
+            if call.function == EMPTY_FUNCTION_NAME:
+                results.append(result("", "Empty function name provided. Provide a valid function name."))
+                continue
             if call.function not in known:
                 results.append(result("", f"Invalid tool {call.function} provided."))
                 continue
