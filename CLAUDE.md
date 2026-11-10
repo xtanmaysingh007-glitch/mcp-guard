@@ -531,6 +531,14 @@ agentdojo, help texts, entry point registered, installed command init + proxy en
 this laptop's Windows Application Control blocks pip's unsigned mcp-guard.exe launcher (WinError 4551, also from
 PowerShell); the tests skip ONLY on that error; CI runs them on clean runners.
 
+## CI (2026-11-10)
+.github/workflows/tests.yml on push + pull_request: job core = ubuntu + windows x Python 3.10/3.11/3.12,
+`pip install -e ".[proxy,test]"` (no AgentDojo), `mcp-guard --help`, pytest; job agentdojo = ubuntu x 3.10/3.12
+with the agentdojo extra, pytest. No model anywhere. tests/conftest.py drops the 7 test files that import
+AgentDojo at the top and skips @pytest.mark.agentdojo tests (22 in test_guard.py) when it isn't installed.
+Local fresh venv without AgentDojo: 75 passed, 25 skipped. tests/test_repo_hygiene.py: git check-ignore must
+cover runs/ and .env. LICENSE: MIT (Copyright 2026 Tanmay).
+
 ## Kaggle recipe (free, runs without the laptop)
 Notebook with GPU T4 x2, Internet on, ONE cell: install zstd/pciutils, `curl ollama.com/install.sh | sh`,
 start server with `subprocess.Popen("nohup ollama serve > /kaggle/working/ollama.log 2>&1 &", shell=True,
