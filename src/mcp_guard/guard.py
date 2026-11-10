@@ -7,7 +7,8 @@ import json
 from typing import Any, Callable
 
 from .policy import Policy
-from .provenance import Provenance, call_canonical, canonical, canonical_value, iter_strings, primary_atom
+from .provenance import (Provenance, call_canonical, canonical, canonical_value, extract_atoms, iter_strings,
+                         primary_atom)
 
 # A plainly blocked call gets the normal "not traceable" reason this many times; any further identical
 # try gets "already refused, stop". (Confirm mode already stops after the user's first "no".)
@@ -118,6 +119,19 @@ class Guard:
                 if atoms:
                     bad[arg] = atoms
         return bad
+
+    def value_sources(self, tool: str, args: dict[str, Any]) -> dict[str, dict[str, str]]:
+        """Guarded argument -> {value: where it came from} (see Provenance.source_of). For audit logs only:
+        it reads the provenance and changes nothing."""
+        out: dict[str, dict[str, str]] = {}
+        checks = [(a, False) for a in self.policy.forbid_tainted.get(tool, [])]
+        checks += [(a, True) for a in self.policy.check_links_in.get(tool, [])]
+        for arg, typed_only in checks:
+            if arg in args:
+                pairs = extract_atoms(args[arg], typed_only)
+                if pairs:
+                    out[arg] = {a: self.prov.source_of(k, a) for k, a in pairs}
+        return out
 
     def _remember_approval(self, tool: str, args: dict[str, Any], bad: dict[str, list[str]]) -> None:
         """Approve only the values the user saw as a whole (a recipient, a URL). An email or IBAN hidden

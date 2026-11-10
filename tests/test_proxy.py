@@ -180,7 +180,20 @@ def test_audit_log_has_every_decision(tmp_path):
     rows = audit(tmp_path)
     assert [r["tool"] for r in rows] == ["read_inbox", "send_email", "send_email"]
     for r in rows:
-        assert {"time", "tool", "args", "allowed", "reason", "asked", "approved", "untraceable"} <= set(r)
+        assert {"time", "tool", "args", "decision", "allowed", "reason", "asked", "approved", "untraceable",
+                "sources"} <= set(r)
+    assert [r["decision"] for r in rows] == ["allowed", "blocked", "blocked"]
+    assert rows[1]["sources"]["recipients"] == {ATTACKER: "untrusted tool output"}   # read off the poisoned email
+    assert rows[2]["sources"]["recipients"] == {"bob@corp.example": "untrusted tool output"}  # inbox, not the request
+
+
+def test_audit_log_records_user_given_values_and_asks(tmp_path):
+    answers = iter([False])
+    run(tmp_path, [("read_inbox", {}), TO_BOB, STEAL], request="Tell bob@corp.example Friday works",
+        confirm=lambda *a: next(answers))
+    rows = audit(tmp_path)
+    assert rows[1]["decision"] == "allowed" and rows[1]["sources"]["recipients"] == {"bob@corp.example": "user request"}
+    assert rows[2]["decision"] == "declined" and rows[2]["asked"] and not rows[2]["approved"]
 
 
 def test_tool_results_are_recorded_trusted_or_untrusted_per_policy(tmp_path):

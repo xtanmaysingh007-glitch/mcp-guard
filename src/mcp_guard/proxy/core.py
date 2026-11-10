@@ -88,9 +88,12 @@ class GuardedProxy:
     def _audit(self, tool: str, args: dict, d: Decision) -> None:
         if not self.audit_log:
             return
-        row = {"time": time.strftime("%Y-%m-%dT%H:%M:%S%z"), "tool": tool, "args": args,
+        # decision: allowed (clean), approved (asked, yes), declined (asked, no), blocked (never forwarded)
+        decision = ("approved" if d.approved else "allowed") if d.allowed else ("declined" if d.asked else "blocked")
+        row = {"time": time.strftime("%Y-%m-%dT%H:%M:%S%z"), "tool": tool, "args": args, "decision": decision,
                "allowed": d.allowed, "reason": d.reason or "allowed", "asked": d.asked, "approved": d.approved,
-               "untraceable": d.tainted, "request_set": bool(self._request)}
+               "untraceable": d.tainted, "sources": self.guard.value_sources(tool, args),
+               "request_set": bool(self._request)}
         with self.audit_log.open("a", encoding="utf-8") as f:
             f.write(json.dumps(row, ensure_ascii=False, default=str) + "\n")
 

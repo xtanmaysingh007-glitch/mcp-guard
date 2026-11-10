@@ -308,6 +308,19 @@ class Provenance:
         return (self.user.contains(kind, atom) or self.tool_values.contains(kind, atom)
                 or (kind not in no_weak and self.weak_values.contains(kind, atom)))
 
+    def source_of(self, kind: str, atom: str) -> str:
+        """Where a value came from, for audit logs (read-only, decides nothing): the first that applies of
+        "user request", "trusted tool", "weak trusted tool", "untrusted tool output", "nowhere"."""
+        if self.user.contains(kind, atom):
+            return "user request"
+        if self.tool_values.contains(kind, atom):
+            return "trusted tool"
+        if self.weak_values.contains(kind, atom):
+            return "weak trusted tool"
+        if self.untrusted.contains(kind, atom):
+            return "untrusted tool output"
+        return "nowhere"
+
     def unverified_pairs(self, value: Any, typed_only: bool = False,
                          no_weak: Collection[str] = ()) -> list[tuple[str, str]]:
         return [(k, a) for k, a in extract_atoms(value, typed_only) if not self.is_trusted(k, a, no_weak)]

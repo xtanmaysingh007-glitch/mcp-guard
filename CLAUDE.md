@@ -501,6 +501,16 @@ strict_trust off and value scope). 6. Rename, README (his voice), CI, LICENSE, l
   elicitation exists but the newest protocol revision has no server-to-client requests.
 - Limits: terminal-only prompts, manual request file, tools only (no resources/prompts/instructions, no
   list_changed), one call at a time, not tried with a real host or model yet.
+- 2026-11-10 additions (commit after 9b10a0c): audit rows also have decision (allowed / approved / declined /
+  blocked) and sources (per guarded value: user request / trusted tool / weak trusted tool / untrusted tool
+  output / nowhere; Guard.value_sources -> Provenance.source_of, read-only). Re-checked the SDK: PyPI latest
+  mcp is 2.3.0 = installed, so the SDK notes above are current. Its JSON-RPC dispatcher runs each request in
+  its own task (concurrency exists), but MCP has no "turn", so P3 batching would be a timing window plus a
+  two-phase guard API; NOT done (docs/proxy.md says so). Proxy spec checklist (stdio + command after --,
+  tools/list unchanged, check_call, trusted/untrusted recording, request file re-read / never a tool / empty =
+  nothing user-given, unknown_tools block, descriptions ignored, terminal prompt with tool + exact args + why,
+  one-time call-bound approval with the prompt timeout as expiry, held call never forwarded, JSONL audit, toy
+  server, e2e tests a-e): all met except batching.
 Design notes still open:
 - P3, batch prompts per model turn: when one model turn makes several guarded calls, show them to the user
   in ONE prompt (approve / decline each) instead of one prompt per call. Replay of the F1 oracle logs: with

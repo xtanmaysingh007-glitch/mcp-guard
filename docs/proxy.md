@@ -87,7 +87,15 @@ If you did not ask for this, say no. Approve this one call? [y/N]
 
 ## Audit log
 
-One JSON line per decision: `time, tool, args, allowed, reason, asked, approved, untraceable, request_set`.
+One JSON line per decision: `time, tool, args, decision, allowed, reason, asked, approved, untraceable, sources,
+request_set`.
+
+- `decision`: `allowed` (nothing to check, or everything traced), `approved` (asked, you said yes), `declined`
+  (asked, you said no or didn't answer), `blocked` (never forwarded, nobody asked).
+- `sources`: for every guarded argument, where each of its values came from: `user request`, `trusted tool`,
+  `weak trusted tool`, `untrusted tool output` or `nowhere` (the model made it up). It only describes; the
+  decision is made the same way with or without it.
+
 It contains the full arguments (email bodies too), so treat it as sensitive.
 
 ## Known limits
@@ -100,7 +108,10 @@ It contains the full arguments (email bodies too), so treat it as sensitive.
 - **Tools only.** Resources, prompts and the server's `instructions` are not proxied at all, and a
   `tools/list_changed` notification from the server is not passed on.
 - Forwarding is "unchanged" as far as the SDK allows: it drops fields it doesn't know about.
-- One call at a time (no parallel tool calls).
+- One call at a time (no parallel tool calls), and one prompt per call: no batching of a turn's calls into
+  one prompt (P3). The SDK does run requests concurrently, but MCP has no notion of a model "turn", so a batch
+  could only be a timing window, and the guard would need a two-phase decide / ask / finish API while still
+  recording each result before the next check. Not done.
 - Everything the guard can't see is still open: persuasion with no tool call, steering among trusted
   options, free-text arguments with no guarded value in them (see the limitations in
   [adaptive_attacks.md](adaptive_attacks.md)). The guard's quality depends on the policy you write.
