@@ -71,7 +71,7 @@ argument must trace to the user's request or to a trusted tool's whole-value out
   our tests don't need the plugin)
 - `tests/test_adaptive.py` + `docs/adaptive_attacks.md` - adaptive red-team traces, no model (first pass 41,
   44 cases; open bypasses are xfail(strict=True); B cases run in default (xfail) and strict mode;
-  whole suite now 196 pass + 8 xfail (2026-11-10, with the proxy, repeat-limit and executor parity tests); B cases run under off (xfail), typed and full)
+  whole suite now 206 pass + 8 xfail (2026-11-10, with the proxy, repeat-limit, executor parity and repeatability tests); B cases run under off (xfail), typed and full)
 - Run logs: `runs/<defense>/local-<model>-<defense>/<suite>/user_task_N/<attack>/injection_task_N.json`
 
 ## Evidence method
@@ -417,9 +417,32 @@ same commit (logs record refusals, not asks); exact for clean logs, at most +1 o
   Noise shows the other way too: guards WON slack tasks 1 and 12 that none failed (no block involved). The only
   no-block loss anywhere is workspace u4 (F7r, both guards). So no number needs a rerun for this; read 1-task
   utility differences between defenses as noise (+-1 task), and the reported guard costs as real block costs.
-  Not done (would make runs more repeatable, not needed for the current numbers): PYTHONHASHSEED=0 in run_batch,
-  re-sorting tool-call args into the tool schema's order before they go back to the model, disabling or
-  flushing the Ollama prompt cache between defenses.
+  Done afterwards for future runs: see REPEATABILITY BOUNDARY below (sorted args, PYTHONHASHSEED=0, fresh
+  Ollama cache per defense).
+- REPEATABILITY BOUNDARY (commit 6b56bab, 2026-11-10): runs made with 6b56bab or later are meant to be
+  repeatable; EVERY run listed above (A-C3, F1-F7r) was made before it and is NOT (frozen numbers stay as they
+  are, none was rerun or changed). The changes apply to all defenses alike, none included
+  (tests/test_repeatability.py, red first):
+  1. SortToolArgs (agentdojo_adapter.py) wraps the LLM in every pipeline, next to StopOnRepeatLimit: each tool
+     call's argument keys are sorted (recursively) right after the reply is parsed, so the logged call, the
+     executed call and the args sent back to the model have one fixed order (Ollama returned them in a random
+     order). Logs from 6b56bab on show sorted args.
+  2. run_batch starts every run_agentdojo child with PYTHONHASHSEED=0 (AgentDojo's set-based outputs, e.g.
+     event participants, get a fixed order).
+  3. run_batch unloads every loaded Ollama model (POST /api/generate keep_alive 0, then waits until /api/ps is
+     empty) before EVERY defense (and every rep), so each defense starts from a fresh model load and an empty
+     prompt cache. Never stops a run if Ollama can't be reached. Retries inside a defense don't unload.
+  Not removed: wall-clock timestamps in AgentDojo's emails/files (they reach the model; no fix without patching
+  AgentDojo), random tool-call IDs (Qwen's template doesn't show them to the model), and GPU-level differences
+  if Kaggle hands out a different GPU / driver.
+- F8 (pending, cell given 2026-11-10): repeatability check on Kaggle (this laptop's GTX 1650 Ti 4 GB can't hold
+  the model, and its Ollama 0.23.4 has a different cache engine). Workspace user_task_4, clean + inj 0-2 (the
+  runner has no option to pick inj 0/3/6, and the old code must run unchanged), defenses none and mcp_guard,
+  qwen2.5-14b-16k, run_batch --reps 2, once with OLD code (b6b39c1) and once with NEW (6b56bab), separate clones
+  sharing one Ollama server. Reports per log: messages differing between rep 1 and rep 2 (tool-call IDs and
+  timestamps masked), and from ollama.log the cached tokens reused by each task's first prompt (expected: OLD
+  0 for the first defense then ~2,395 for later ones; NEW 0 at the start of every defense, with a model load
+  each time). Caps 0.35 h per defense per rep; expected ~1.3 h, worst ~3 h.
 Then: 4. Repeats on key numbers (the freeze runs above are the current-guard numbers; earlier ones used
 strict_trust off and value scope). 6. Rename, README (his voice), CI, LICENSE, limitations section.
 
