@@ -207,3 +207,20 @@ def test_attribution_finds_and_labels_frozen_runs(tmp_path, monkeypatch, capsys)
     attribution.main()
     out = capsys.readouterr().out
     assert "none rep1 " in out and "none rep1 [clock-frozen]" in out and "none rep2 [clock-frozen]" in out
+
+
+def test_pick_injection_tasks():
+    """--inj-tasks 10 11 12 13 picks those (suite order); --n-inj N the first N; not both."""
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+    from run_agentdojo import pick_injection_tasks
+    ids = [f"injection_task_{i}" for i in (3, 0, 13, 10, 12, 11, 1)]
+    assert pick_injection_tasks(ids, None, None) == [f"injection_task_{i}" for i in (0, 1, 3, 10, 11, 12, 13)]
+    assert pick_injection_tasks(ids, 2, None) == ["injection_task_0", "injection_task_1"]
+    assert pick_injection_tasks(ids, None, ["13", "injection_task_10", "11", "12"]) == \
+        [f"injection_task_{i}" for i in (10, 11, 12, 13)]
+    with pytest.raises(ValueError):
+        pick_injection_tasks(ids, 2, ["10"])
+    with pytest.raises(ValueError):
+        pick_injection_tasks(ids, None, ["99"])

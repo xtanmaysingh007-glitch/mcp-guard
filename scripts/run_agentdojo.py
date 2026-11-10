@@ -147,6 +147,21 @@ def build_llm(provider: str, ollama_model: str | None = None):
     return llm, name
 
 
+def pick_injection_tasks(all_ids, n_inj: int | None, numbers: list[str] | None) -> list[str]:
+    """Injection tasks to run, in the suite's order: all, the first n_inj, or the ones named in numbers
+    ("10" or "injection_task_10")."""
+    ordered = sorted(all_ids, key=lambda t: int(t.split("_")[-1]))
+    if numbers and n_inj is not None:
+        raise ValueError("use --n-inj or --inj-tasks, not both")
+    if not numbers:
+        return ordered[:n_inj]
+    wanted = {f"injection_task_{int(t.split('_')[-1])}" for t in numbers}
+    unknown = wanted - set(ordered)
+    if unknown:
+        raise ValueError(f"unknown injection tasks: {sorted(unknown)}")
+    return [t for t in ordered if t in wanted]
+
+
 def log_dir(defense: str, rep: int = 1, freeze_clock: bool = False) -> Path:
     """runs/<defense>[/clock-frozen][/rep<N>]. Frozen-clock runs get their own folder: AgentDojo resumes from
     whatever logs are in the folder, so the two kinds must never mix (and the folder labels the run)."""
@@ -174,6 +189,8 @@ def main():
     ap.add_argument("--user-tasks", nargs="+", default=None, metavar="N",
                     help="only these user tasks, by number (e.g. 4 13 25); pick them with scripts/injectable_tasks.py")
     ap.add_argument("--n-inj", type=int, default=None, help="only first N injection tasks")
+    ap.add_argument("--inj-tasks", nargs="+", default=None, metavar="N",
+                    help="only these injection tasks, e.g. --inj-tasks 10 11 12 13 (not with --n-inj)")
     ap.add_argument("--skip-clean", action="store_true", help="skip the no-attack utility run")
     ap.add_argument("--no-attack", action="store_true", help="only the clean utility run (no injection tasks)")
     ap.add_argument("--rerun", action="store_true", help="ignore cached logs")
@@ -198,7 +215,10 @@ def main():
         if unknown:
             ap.error(f"not in {args.suite}: {sorted(unknown)}")
         user_tasks = [t for t in user_tasks if t in wanted]
-    inj_tasks = sorted(suite.injection_tasks, key=lambda t: int(t.split("_")[-1]))[: args.n_inj]
+    try:
+        inj_tasks = pick_injection_tasks(suite.injection_tasks, args.n_inj, args.inj_tasks)
+    except ValueError as e:
+        ap.error(str(e))
     if args.freeze_clock:
         from mcp_guard.agentdojo_clock import freeze_clock
         freeze_clock()
