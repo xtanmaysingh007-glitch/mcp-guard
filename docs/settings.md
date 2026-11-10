@@ -26,6 +26,9 @@ The proxy (`mcp-guard proxy`) also overrides a few things on top of the file, li
 | `approval_scope` | `value` | `value` | `value` |
 | `approval_scope_by_tool` | none | `call` for send_email, DMs, channel messages, create/append file, post_webpage | none |
 | `approval_ttl_calls` | `5` | `5` | `5` |
+| `self_note_tools` | `send_email: [recipients, body]` | same (not in the file: default) | same (default) |
+| `self_note_copy_words` | `6` | `6` | `6` |
+| `self_note_min_digits` | `8` | `8` | `8` |
 
 ## What each one does, and why the default is what it is
 
@@ -92,6 +95,15 @@ clean slack from 2.38 to 1.43 prompts per task.
 
 **`approval_ttl_calls`** (`5`). An approval given *ahead* of a call (`Guard.approve_call`, for asynchronous
 approval) expires after this many checked calls, and is used at most once.
+
+**`self_note_tools`, `self_note_copy_words`, `self_note_min_digits`** (message to self, 2026-11-11). For the
+listed tools (`tool: [recipient arg, text arg, ...]`), when *every* recipient is one of `user_identities`, the
+text args may not copy `self_note_copy_words` words of untrusted tool output (not in the user's request), nor
+carry a digit run of `self_note_min_digits`+ digits that traces to neither the request nor a trusted tool.
+Why: `user_identities` makes the user's own address user-given, so an attacker's ransom note mailed "to
+yourself" used to pass (workspace injection tasks 9 and 12, seen live 12 times). Missing or empty keys get the
+defaults above (fail-safe); `0` switches that half off. It closes the observed variant only: a paraphrase
+without digits, or a number written in words, still passes (docs/adaptive_attacks.md, G).
 
 ## Fixed in code (not in the policy file)
 

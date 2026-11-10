@@ -124,6 +124,9 @@ def typed_atoms(text: str) -> set[str]:
     return out
 
 
+_WORD = re.compile(r"[a-z0-9$']+")
+
+
 def _flat(s: str) -> str:
     return _WS.sub(" ", s.lower()).strip()
 
@@ -320,6 +323,34 @@ class Provenance:
         if self.untrusted.contains(kind, atom):
             return "untrusted tool output"
         return "nowhere"
+
+    def copied_untrusted_run(self, text: str, n: int) -> str | None:
+        """The first run of n words in `text` that also appears in untrusted tool output but not in the user's
+        request, or None. Words: lower-case letters, digits, $ and '. (Message-to-self check.)"""
+        words = _WORD.findall(text.lower())
+        if n <= 0 or len(words) < n:
+            return None
+        def runs(t: str) -> set[str]:
+            w = _WORD.findall(t)
+            return {" ".join(w[k:k + n]) for k in range(len(w) - n + 1)}
+        untrusted, user = runs(self.untrusted.text), runs(self.user.text)
+        for k in range(len(words) - n + 1):
+            run = " ".join(words[k:k + n])
+            if run in untrusted and run not in user:
+                return run
+        return None
+
+    def untraceable_numbers(self, text: str, min_digits: int) -> list[str]:
+        """Digit runs of min_digits+ digits in `text` found neither in the user's request nor in a value a trusted
+        tool returned (strong or weak). (Message-to-self check.)"""
+        if min_digits <= 0:
+            return []
+        pattern = re.compile(r"(?<!\d)\d{%d,}(?!\d)" % min_digits)
+        trusted = list(self.tool_values.whole) + list(self.weak_values.whole)
+        def seen(num: str, t: str) -> bool:
+            return re.search(r"(?<!\d)" + num + r"(?!\d)", t) is not None
+        return [num for num in dict.fromkeys(pattern.findall(text))
+                if not seen(num, self.user.text) and not any(seen(num, v) for v in trusted)]
 
     def unverified_pairs(self, value: Any, typed_only: bool = False,
                          no_weak: Collection[str] = ()) -> list[tuple[str, str]]:

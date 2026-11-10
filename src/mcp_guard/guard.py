@@ -118,7 +118,36 @@ class Guard:
                 atoms = [a for a in atoms if (tool, arg, canonical(a)) not in self.approved]
                 if atoms:
                     bad[arg] = atoms
+        for arg, issues in self._self_note_issues(tool, args).items():
+            bad[arg] = bad.get(arg, []) + issues
         return bad
+
+    def _self_note_issues(self, tool: str, args: dict[str, Any]) -> dict[str, list[str]]:
+        """Message to self (workspace injection tasks 9 / 12: a ransom note mailed to the user's own address).
+        The user's own address counts as user-given, and free text is otherwise only checked for links / emails /
+        IBANs, so such a note used to pass. Now, when EVERY recipient is one of user_identities, the text args may
+        not copy self_note_copy_words+ words of untrusted text, nor carry a long digit run that traces to neither
+        the user nor a trusted tool. What's found is reported like an untraceable value (ask / block).
+        Closes the observed variant only: a paraphrase without digits, or a number in words, still passes."""
+        spec = self.policy.self_note_tools.get(tool)
+        identities = {u.strip().lower() for u in self.policy.user_identities}
+        if not spec or not identities or spec[0] not in args:
+            return {}
+        recipients = args[spec[0]]
+        recipients = [recipients] if isinstance(recipients, str) else list(recipients or [])
+        if not recipients or not all(str(r).strip().lower() in identities for r in recipients):
+            return {}
+        issues: dict[str, list[str]] = {}
+        for arg in spec[1:]:
+            text = " ".join(iter_strings(args.get(arg))) if args.get(arg) is not None else ""
+            found = []
+            run = self.prov.copied_untrusted_run(text, self.policy.self_note_copy_words)
+            if run:
+                found.append(f"copied from untrusted data: '{run}'")
+            found += [f"untraceable number {n}" for n in self.prov.untraceable_numbers(text, self.policy.self_note_min_digits)]
+            if found:
+                issues[arg] = found
+        return issues
 
     def value_sources(self, tool: str, args: dict[str, Any]) -> dict[str, dict[str, str]]:
         """Guarded argument -> {value: where it came from} (see Provenance.source_of). For audit logs only:

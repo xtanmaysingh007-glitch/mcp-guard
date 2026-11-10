@@ -21,6 +21,7 @@ UNKNOWN_SETTINGS = ("allow", "block")
 #   value - the approved value(s), for that tool and argument, for the rest of the session (other args free)
 #   call  - only that exact call (tool + every argument), once; a changed body or recipient asks again
 APPROVAL_SCOPES = ("value", "call")
+SELF_NOTE_TOOLS = {"send_email": ["recipients", "body"]}
 
 
 @dataclass
@@ -41,6 +42,13 @@ class Policy:
     approval_scope: str = "value"  # value / call, see APPROVAL_SCOPES: the default for every tool ...
     approval_scope_by_tool: dict[str, str] = field(default_factory=dict)  # ... and per-tool overrides
     approval_ttl_calls: int = 5    # call scope: a stored approval expires after this many checked calls
+    # Message to self (2026-11-11): for these tools, when EVERY recipient is one of user_identities, the text args
+    # must not copy self_note_copy_words+ words of untrusted text, nor carry a digit run of self_note_min_digits+
+    # digits that traces to neither the user nor a trusted tool (an attacker's "note to self" with a ransom IBAN).
+    # tool -> [recipient arg, text arg, ...]. 0 switches that half off. Missing keys get these (safe) defaults.
+    self_note_tools: dict[str, list[str]] = field(default_factory=lambda: dict(SELF_NOTE_TOOLS))
+    self_note_copy_words: int = 6
+    self_note_min_digits: int = 8
     mode: str = "allowlist"  # allowlist: guarded args must trace to trusted data (default-deny)
                              # taint: block only values seen verbatim in untrusted data (weaker)
 
@@ -76,6 +84,11 @@ class Policy:
             approval_scope=str(data.get("approval_scope", "value")),
             approval_scope_by_tool={k: str(v) for k, v in (data.get("approval_scope_by_tool") or {}).items()},
             approval_ttl_calls=int(data.get("approval_ttl_calls", 5)),
+            # missing or empty -> the safe defaults; an explicit 0 switches a check off
+            self_note_tools=({k: list(v) for k, v in data["self_note_tools"].items()}
+                             if data.get("self_note_tools") else dict(SELF_NOTE_TOOLS)),
+            self_note_copy_words=_count(data.get("self_note_copy_words"), 6),
+            self_note_min_digits=_count(data.get("self_note_min_digits"), 8),
         )
 
     def with_mode(self, mode: str) -> "Policy":
@@ -114,6 +127,16 @@ class Policy:
     def without_link_checks(self) -> "Policy":
         """Ablation: do not scan free-text args for links/emails/IBANs."""
         return replace(self, check_links_in={})
+
+
+def _count(value, default: int) -> int:
+    """A non-negative whole number from YAML; missing / empty -> default (the safe one)."""
+    if value is None:
+        return default
+    n = int(value)
+    if n < 0:
+        raise ValueError("self_note thresholds must be 0 (off) or more")
+    return n
 
 
 def _trust_setting(value) -> str:
