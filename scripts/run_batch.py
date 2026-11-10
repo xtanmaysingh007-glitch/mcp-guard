@@ -8,12 +8,49 @@ redoes the unfinished tasks. This wrapper loops until each run completes (or giv
   python scripts/run_batch.py --suite banking --defenses none mcp_guard --reps 3 --attack tool_knowledge
 """
 import argparse
+import os
 import subprocess
 import sys
 import time
 from pathlib import Path
 
+import httpx
+
 HERE = Path(__file__).parent
+
+
+def child_env() -> dict:
+    """Our environment plus a fixed string-hash seed. AgentDojo builds some tool outputs from Python sets (e.g.
+    calendar event participants), whose order otherwise changes with every process, so the model would see
+    different text in different runs."""
+    return {**os.environ, "PYTHONHASHSEED": "0"}
+
+
+def ollama_host() -> str:
+    return os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434/v1").rstrip("/").removesuffix("/v1")
+
+
+def unload_models() -> None:
+    """Unload every model Ollama has in memory, so the next defense starts with an empty prompt cache.
+
+    Why: the server keeps a prompt cache, and the first run of a defense used to reuse tokens cached by the
+    previous defense's last run, while the first defense started cold. That alone changed answers at
+    temperature 0 (workspace user_task_4, F7/F7r). keep_alive 0 stops the model's runner process, and its cache
+    with it; the next request loads the model fresh. Never stops a run: if Ollama can't be reached, say so and go
+    on (the run itself will report a real problem)."""
+    host = ollama_host()
+    try:
+        names = [m["name"] for m in httpx.get(f"{host}/api/ps", timeout=10).json().get("models", [])]
+        for name in names:
+            httpx.post(f"{host}/api/generate", json={"model": name, "keep_alive": 0}, timeout=60).raise_for_status()
+        for _ in range(30):                      # wait (max ~30 s) until the runner has really gone
+            if not httpx.get(f"{host}/api/ps", timeout=10).json().get("models"):
+                break
+            time.sleep(1)
+        print(f"unloaded {names or 'nothing (no model was loaded)'}: next defense starts with an empty prompt cache",
+              flush=True)
+    except (httpx.HTTPError, ValueError, KeyError) as e:
+        print(f"could not unload Ollama models ({type(e).__name__}: {e}); going on", flush=True)
 
 
 def main():
@@ -36,6 +73,8 @@ def main():
         key = f"{d} rep{rep}"
         # one time budget per defense, shared by all its retries, so retries can't stretch the worst case
         deadline = time.monotonic() + args.run_timeout * 3600
+        if args.provider == "ollama":
+            unload_models()              # every defense starts from an empty prompt cache (none included)
         for attempt in range(1, args.max_attempts + 1):
             print(f"\n=== {args.suite} / {key} (attempt {attempt}/{args.max_attempts}) ===", flush=True)
             try:
@@ -45,7 +84,7 @@ def main():
                 rc = subprocess.call([sys.executable, str(HERE / "run_agentdojo.py"), "--provider", args.provider,
                                       "--suite", args.suite, "--defense", d, "--rep", str(rep),
                                       *(["--model", args.model] if args.model else []), *extra],
-                                     timeout=left)
+                                     timeout=left, env=child_env())
             except subprocess.TimeoutExpired:
                 # subprocess.call kills the child on timeout. A stuck run would just get stuck again,
                 # so give up on this defense instead of retrying, and move on to the next one.

@@ -51,6 +51,36 @@ class StopOnRepeatLimit(BasePipelineElement):
             return query, runtime, env, [*messages, note], extra_args
 
 
+def _sorted(value):
+    """The same value with every dict's keys in sorted order (nested dicts and lists included)."""
+    if isinstance(value, dict):
+        return {k: _sorted(value[k]) for k in sorted(value)}
+    if isinstance(value, list):
+        return [_sorted(v) for v in value]
+    return value
+
+
+class SortToolArgs(BasePipelineElement):
+    """Wraps the LLM in EVERY pipeline (none included): sorts the keys of each tool call's arguments in the reply.
+
+    Why: Ollama returns arguments in a random key order (it parses them into a Go map; 2026-11-10: 179
+    create_calendar_event calls came back in 14 orders, all rotations of one). AgentDojo sends them back as
+    json.dumps(args) in the next prompt, so the model's input changed at random between runs. Sorted, it is the
+    same every time, for every defense. Only the order changes, never a value."""
+
+    def __init__(self, llm: BasePipelineElement):
+        self.llm = llm
+        self.name = getattr(llm, "name", None)
+
+    def query(self, query, runtime, env=EmptyEnv(), messages=[], extra_args={}):
+        query, runtime, env, out, extra_args = self.llm.query(query, runtime, env, messages, extra_args)
+        last = out[-1] if out else None
+        if last and last["role"] == "assistant" and last.get("tool_calls"):
+            for call in last["tool_calls"]:
+                call.args = _sorted(call.args)
+        return query, runtime, env, out, extra_args
+
+
 class GuardSessionStart(BasePipelineElement):
     """Resets the guard at the start of every task and records the user's request as trusted."""
 
@@ -179,7 +209,8 @@ def build_pipeline(llm: OpenAILLM | BasePipelineElement, name: str, defense: str
     sys_msg = load_system_message(None)
     guard = None
     raw_llm = llm
-    llm = StopOnRepeatLimit(raw_llm)       # a looping model ends its own task, not the run
+    # Shared by every defense: a looping model ends its own task, not the run; argument keys come back sorted
+    llm = SortToolArgs(StopOnRepeatLimit(raw_llm))
 
     if defense in GUARD_DEFENSES:
         guard = Guard(policy_for(defense, policy_path), confirm_fn=CONFIRM_USERS.get(defense))
