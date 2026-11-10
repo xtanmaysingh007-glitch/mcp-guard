@@ -539,6 +539,14 @@ AgentDojo at the top and skips @pytest.mark.agentdojo tests (22 in test_guard.py
 Local fresh venv without AgentDojo: 75 passed, 25 skipped. tests/test_repo_hygiene.py: git check-ignore must
 cover runs/ and .env. LICENSE: MIT (Copyright 2026 Tanmay).
 
+## Latency (scripts/bench_latency.py, run 2026-11-10 on the dev laptop: Python 3.12, Windows 11, Intel 10th gen)
+Guard.check_call, AgentDojo policy, session with ~30 inbox emails + a file + a calendar day seen, 10,000 calls each:
+allowed send_email (values traced to the request) median 452 us / p95 807 us; blocked send_email 167 / 275 us;
+read-only tool 53 / 83 us; confirm mode, instant yes, asked every call 249 / 398 us. MCP proxy end to end (real
+processes, stdio, toy server, 500 calls per tool): direct ~3.1 ms median, through the proxy ~7.9 ms, so ~4.8 ms
+added per call (p95 10.0 vs 4.0 ms); most of it is the extra process hop and JSON-RPC both ways, not the check.
+One machine, one run; a human answering a prompt dwarfs all of this.
+
 ## Kaggle recipe (free, runs without the laptop)
 Notebook with GPU T4 x2, Internet on, ONE cell: install zstd/pciutils, `curl ollama.com/install.sh | sh`,
 start server with `subprocess.Popen("nohup ollama serve > /kaggle/working/ollama.log 2>&1 &", shell=True,
