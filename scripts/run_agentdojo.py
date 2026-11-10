@@ -147,6 +147,17 @@ def build_llm(provider: str, ollama_model: str | None = None):
     return llm, name
 
 
+def log_dir(defense: str, rep: int = 1, freeze_clock: bool = False) -> Path:
+    """runs/<defense>[/clock-frozen][/rep<N>]. Frozen-clock runs get their own folder: AgentDojo resumes from
+    whatever logs are in the folder, so the two kinds must never mix (and the folder labels the run)."""
+    d = Path("runs") / defense
+    if freeze_clock:
+        d = d / "clock-frozen"
+    if rep > 1:
+        d = d / f"rep{rep}"
+    return d
+
+
 def rate(d: dict) -> float | None:
     return round(sum(d.values()) / len(d), 4) if d else None
 
@@ -166,6 +177,9 @@ def main():
     ap.add_argument("--skip-clean", action="store_true", help="skip the no-attack utility run")
     ap.add_argument("--no-attack", action="store_true", help="only the clean utility run (no injection tasks)")
     ap.add_argument("--rerun", action="store_true", help="ignore cached logs")
+    ap.add_argument("--freeze-clock", action="store_true",
+                    help="fixed timestamps on newly created emails/files (agentdojo_clock.py); logs go to "
+                         "runs/<defense>/clock-frozen/ and the summary says freeze_clock: true")
     ap.add_argument("--rep", type=int, default=1, help="repeat number; rep 2+ logs to runs/<defense>/rep<N> so it doesn't reuse the cache")
     args = ap.parse_args()
     if args.no_attack and args.skip_clean:
@@ -185,11 +199,12 @@ def main():
             ap.error(f"not in {args.suite}: {sorted(unknown)}")
         user_tasks = [t for t in user_tasks if t in wanted]
     inj_tasks = sorted(suite.injection_tasks, key=lambda t: int(t.split("_")[-1]))[: args.n_inj]
-    logdir = Path("runs") / args.defense
-    if args.rep > 1:
-        logdir = logdir / f"rep{args.rep}"
+    if args.freeze_clock:
+        from mcp_guard.agentdojo_clock import freeze_clock
+        freeze_clock()
+    logdir = log_dir(args.defense, args.rep, args.freeze_clock)
     logdir.mkdir(parents=True, exist_ok=True)
-    out = {"model": name, "defense": args.defense, "suite": args.suite, "attack": args.attack, "rep": args.rep, "user_tasks": user_tasks, "injection_tasks": inj_tasks}
+    out = {"model": name, "defense": args.defense, "suite": args.suite, "attack": args.attack, "rep": args.rep, "freeze_clock": args.freeze_clock, "user_tasks": user_tasks, "injection_tasks": inj_tasks}
 
     with OutputLogger(str(logdir), live=None):
         if not args.skip_clean:

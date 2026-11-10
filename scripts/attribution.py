@@ -109,15 +109,18 @@ def main():
     runs = Path("runs")
     for ddir in sorted(p for p in runs.iterdir() if p.is_dir()):
         defense = ddir.name
-        rdirs = [ddir] + sorted(p for p in ddir.glob("rep*") if p.is_dir())
-        for rdir in rdirs:
-            rep = rdir.name if rdir != ddir else "rep1"
+        # runs/<defense>[/clock-frozen][/rep<N>]; --freeze-clock runs are labelled as such
+        rdirs = []
+        for base, tag in [(ddir, ""), (ddir / "clock-frozen", " [clock-frozen]")]:
+            if base.is_dir():
+                rdirs += [(base, "rep1", tag)] + [(p, p.name, tag) for p in sorted(base.glob("rep*")) if p.is_dir()]
+        for rdir, rep, tag in rdirs:
             suite_dir = rdir / f"{a.model}-{defense}" / a.suite
             files = sorted(suite_dir.glob(f"user_task_*/{a.attack}/injection_task_*.json"))
             if not files:
                 continue
             found_any = True
-            label = f"{defense} {rep}"
+            label = f"{defense} {rep}{tag}"
             c = Counter()
             for f in files:
                 out, why = classify(f, canaries)

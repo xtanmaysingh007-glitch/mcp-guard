@@ -20,6 +20,7 @@ from agentdojo.agent_pipeline.tool_execution import (
 from agentdojo.functions_runtime import EmptyEnv, Env, FunctionsRuntime
 from agentdojo.types import ChatMessage, ChatToolResultMessage, text_content_block_from_string
 
+from .agentdojo_clock import reset_clock
 from .guard import Guard
 from .policy import TRUST_SETTINGS, DEFAULT_POLICY_PATH, Policy
 
@@ -79,6 +80,15 @@ class SortToolArgs(BasePipelineElement):
             for call in last["tool_calls"]:
                 call.args = _sorted(call.args)
         return query, runtime, env, out, extra_args
+
+
+class ResetClock(BasePipelineElement):
+    """First element of EVERY pipeline: starts the --freeze-clock clock over for each task, so a task's stamps
+    don't depend on what ran before it. A no-op unless --freeze-clock is on (agentdojo_clock.py)."""
+
+    def query(self, query, runtime, env=EmptyEnv(), messages=[], extra_args={}):
+        reset_clock()
+        return query, runtime, env, messages, extra_args
 
 
 class GuardSessionStart(BasePipelineElement):
@@ -235,6 +245,6 @@ def build_pipeline(llm: OpenAILLM | BasePipelineElement, name: str, defense: str
     else:
         raise ValueError(f"defense must be one of {DEFENSES}")
 
-    pipeline = AgentPipeline(elements)
+    pipeline = AgentPipeline([ResetClock(), *elements])
     pipeline.name = f"{name}-{defense}"
     return pipeline, guard

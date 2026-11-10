@@ -60,6 +60,8 @@ def main():
     ap.add_argument("--defenses", nargs="+", default=["none", "mcp_guard"])
     ap.add_argument("--model", default=None, help="passed through to run_agentdojo.py")
     ap.add_argument("--reps", type=int, default=1, help="run each defense this many times")
+    ap.add_argument("--freeze-clock", action="store_true",
+                    help="pass --freeze-clock to every run (fixed timestamps on new emails/files; own log folder)")
     ap.add_argument("--max-attempts", type=int, default=6)
     ap.add_argument("--wait", type=int, default=60, help="seconds to wait before retrying a failed run")
     ap.add_argument("--run-timeout", type=float, default=2.0,
@@ -83,7 +85,8 @@ def main():
                     raise subprocess.TimeoutExpired("run_agentdojo.py", args.run_timeout * 3600)
                 rc = subprocess.call([sys.executable, str(HERE / "run_agentdojo.py"), "--provider", args.provider,
                                       "--suite", args.suite, "--defense", d, "--rep", str(rep),
-                                      *(["--model", args.model] if args.model else []), *extra],
+                                      *(["--model", args.model] if args.model else []),
+                                      *(["--freeze-clock"] if args.freeze_clock else []), *extra],
                                      timeout=left, env=child_env())
             except subprocess.TimeoutExpired:
                 # subprocess.call kills the child on timeout. A stuck run would just get stuck again,
