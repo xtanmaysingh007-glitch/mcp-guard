@@ -1,6 +1,6 @@
 """With nothing to block, GuardedToolsExecutor must give the model exactly what AgentDojo's ToolsExecutor gives it.
 
-Why this exists (2026-11-10): workspace user_task_4 failed on the clean run under mcp_guard and confirm_oracle,
+Why this exists (2026-11-10): workspace user_task_4 failed on the clean run under tracklimits and confirm_oracle,
 but not under none, in F7 and F7r, with no block involved. If the guarded executor formatted a tool result,
 an error or the arguments even slightly differently, the model's input would differ and so could its answer.
 These tests replay a real logged run (tests/fixtures/ws_user_task_4_none.json, the F7r none run) through both
@@ -17,9 +17,9 @@ from agentdojo.agent_pipeline.tool_execution import EMPTY_FUNCTION_NAME, ToolsEx
 from agentdojo.functions_runtime import FunctionCall, FunctionsRuntime
 from agentdojo.task_suite.load_suites import get_suite
 
-from mcp_guard.agentdojo_adapter import GuardedToolsExecutor
-from mcp_guard.guard import Guard
-from mcp_guard.policy import Policy
+from tracklimits.agentdojo_adapter import GuardedToolsExecutor
+from tracklimits.guard import Guard
+from tracklimits.policy import Policy
 
 FIXTURE = Path(__file__).parent / "fixtures" / "ws_user_task_4_none.json"
 

@@ -13,7 +13,7 @@
                  the guard's own work, not a human's), one-time approvals (asked on every call)
    Each call is timed alone (perf_counter_ns); median and 95th percentile in microseconds.
 2. The MCP proxy end to end (needs `pip install -e ".[proxy]"`): real processes over stdio, an MCP client
-   calling the toy server directly vs through `python -m mcp_guard.proxy`; the difference is the proxy's
+   calling the toy server directly vs through `python -m tracklimits.proxy`; the difference is the proxy's
    overhead (an extra process hop + JSON-RPC both ways + the guard check + the audit log line).
 """
 from __future__ import annotations
@@ -30,8 +30,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from mcp_guard.guard import Guard  # noqa: E402
-from mcp_guard.policy import DEFAULT_POLICY_PATH, Policy  # noqa: E402
+from tracklimits.guard import Guard  # noqa: E402
+from tracklimits.policy import DEFAULT_POLICY_PATH, Policy  # noqa: E402
 
 USER = ("Please email bob.smith@bluesparrowtech.com the summary of today's meetings, and include the agenda "
         "link https://docs.bluesparrowtech.com/agenda/2024-05-15")
@@ -99,7 +99,7 @@ def bench_proxy(calls: int) -> None:
     env = {**os.environ, "PYTHONPATH": str(ROOT / "src"), "TOY_CALL_LOG": str(tmp / "calls.jsonl")}
     direct = StdioServerParameters(command=sys.executable, args=[toy], env=env)
     proxied = StdioServerParameters(command=sys.executable, env=env, args=[
-        "-m", "mcp_guard.proxy", "--policy", policy, "--user-request-file", str(req), "--audit-log",
+        "-m", "tracklimits.proxy", "--policy", policy, "--user-request-file", str(req), "--audit-log",
         str(tmp / "audit.jsonl"), "--confirm", "none", "--", sys.executable, toy])
     send = {"recipients": ["bob@corp.example"], "subject": "lunch", "body": "Friday works"}
 

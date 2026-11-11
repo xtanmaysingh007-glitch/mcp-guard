@@ -1,4 +1,4 @@
-"""`mcp-guard init`: write a policy skeleton for a set of tools.
+"""`tracklimits init`: write a policy skeleton for a set of tools.
 
 Input: a JSON file with an MCP server's tool list. Accepted shapes: the tools/list result
 ({"tools": [...]}), the whole JSON-RPC response ({"result": {"tools": [...]}}), a plain list of tool
@@ -8,7 +8,7 @@ Output: a YAML policy where EVERY tool sits under "unclassified" and unknown_too
 runs until a person has looked at each tool and moved it into a section. Each section is explained in
 comments. The file loads as a valid Policy as is (it just blocks everything).
 
-    python -m mcp_guard init tools.json -o policy.yaml [--force]
+    python -m tracklimits init tools.json -o policy.yaml [--force]
 """
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ import json
 from pathlib import Path
 
 HEADER = """\
-# MCP Guard policy (skeleton made by `mcp-guard init`).
+# TrackLimits policy (skeleton made by `tracklimits init`).
 #
 # Every tool starts under "unclassified" at the bottom, and unknown_tools is "block": a tool that is in no
 # section below can't run. Move each tool into the section(s) that fit, then delete it from "unclassified".
@@ -92,7 +92,7 @@ def skeleton(tools: list[dict]) -> str:
 
 
 def main(argv: list[str] | None = None) -> int:
-    ap = argparse.ArgumentParser(prog="mcp-guard")
+    ap = argparse.ArgumentParser(prog="tracklimits")
     sub = ap.add_subparsers(dest="command", required=True)
     init = sub.add_parser("init", help="write a policy skeleton from a JSON tool list")
     init.add_argument("tools", help="JSON file: MCP tools/list output, or a list of tools / names")

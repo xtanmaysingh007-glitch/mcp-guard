@@ -5,12 +5,12 @@ The host starts the proxy instead of the server; the proxy starts the server and
 except that every `tools/call` is checked first.
 
 ```
-host  <-stdio->  python -m mcp_guard.proxy  <-stdio->  real MCP server
+host  <-stdio->  python -m tracklimits.proxy  <-stdio->  real MCP server
 ```
 
-It's small (about 300 lines in [src/mcp_guard/proxy/](../src/mcp_guard/proxy/)) and uses only the core
+It's small (about 300 lines in [src/tracklimits/proxy/](../src/tracklimits/proxy/)) and uses only the core
 modules (guard, policy, provenance). It needs the MCP Python SDK 2.x: `pip install -e ".[proxy]"` (or `pip install -r requirements-proxy.txt`),
-which also installs the `mcp-guard` command (`mcp-guard init`, `mcp-guard proxy`).
+which also installs the `tracklimits` command (`tracklimits init`, `tracklimits proxy`).
 
 ## What it does
 
@@ -30,7 +30,7 @@ which also installs the `mcp-guard` command (`mcp-guard init`, `mcp-guard proxy`
 1. Get the server's tool list (a `tools/list` result saved as JSON) and make a policy skeleton:
 
    ```bash
-   mcp-guard init tools.json -o policy.yaml
+   tracklimits init tools.json -o policy.yaml
    ```
 
    Every tool starts as `unclassified`, and `unknown_tools: block` means none of them can run until you
@@ -43,7 +43,7 @@ which also installs the `mcp-guard` command (`mcp-guard init`, `mcp-guard proxy`
 3. Point the host at the proxy instead of the server. Everything after `--` is the real server's command:
 
    ```bash
-   mcp-guard proxy --policy policy.yaml --user-request-file request.txt --audit-log audit.jsonl -- python my_server.py
+   tracklimits proxy --policy policy.yaml --user-request-file request.txt --audit-log audit.jsonl -- python my_server.py
    ```
 
    In a host config file this goes in the server's `command` / `args`.
@@ -70,7 +70,7 @@ When a call has an untraceable value and the tool is `confirmable` (or `always_c
 and the proxy asks in the terminal:
 
 ```
-=== mcp-guard: a tool call is waiting for your OK ===
+=== tracklimits: a tool call is waiting for your OK ===
 tool: send_email
 arguments (exactly what will be sent if you approve):
 { "recipients": ["mallory@evil.example"], ... }

@@ -1,4 +1,4 @@
-"""Plug MCP Guard (and baseline defenses) into AgentDojo pipelines."""
+"""Plug TrackLimits (and baseline defenses) into AgentDojo pipelines."""
 from __future__ import annotations
 
 import json
@@ -201,26 +201,41 @@ def _oracle(tool, args, bad):
 
 
 CONFIRM_USERS = {
-    "mcp_guard_confirm_no": lambda tool, args, bad: False,    # same as plain blocking, but with "don't retry"
-    "mcp_guard_confirm_yes": lambda tool, args, bad: True,    # worst case: clicks yes on everything
-    "mcp_guard_confirm_oracle": _oracle,
+    "tracklimits_confirm_no": lambda tool, args, bad: False,    # same as plain blocking, but with "don't retry"
+    "tracklimits_confirm_yes": lambda tool, args, bad: True,    # worst case: clicks yes on everything
+    "tracklimits_confirm_oracle": _oracle,
     # same careful user, with each strict_trust setting forced (to compare them)
-    **{f"mcp_guard_confirm_oracle_trust_{s}": _oracle for s in TRUST_SETTINGS},
+    **{f"tracklimits_confirm_oracle_trust_{s}": _oracle for s in TRUST_SETTINGS},
 }
 # Ablations: the full guard with one part switched off, to see how much each part matters.
 ABLATIONS = {
-    "mcp_guard_no_trusted": Policy.without_trusted_tools,  # every tool output counts as untrusted
-    "mcp_guard_no_links": Policy.without_link_checks,      # free-text bodies are not scanned for links/emails
+    "tracklimits_no_trusted": Policy.without_trusted_tools,  # every tool output counts as untrusted
+    "tracklimits_no_links": Policy.without_link_checks,      # free-text bodies are not scanned for links/emails
 }
-GUARD_DEFENSES = ("mcp_guard", *(f"mcp_guard_trust_{s}" for s in TRUST_SETTINGS), "mcp_guard_taint",
+GUARD_DEFENSES = ("tracklimits", *(f"tracklimits_trust_{s}" for s in TRUST_SETTINGS), "tracklimits_taint",
                   *CONFIRM_USERS, *ABLATIONS)
 DEFENSES = ["none", *GUARD_DEFENSES, "spotlighting", "repeat_user_prompt", "tool_filter"]
+
+# The project was called mcp-guard until 2026-11-11, and its defenses mcp_guard, mcp_guard_confirm_oracle, ... .
+# Frozen run folders and logs keep those names, so every entry point that takes a defense name also accepts the
+# old one: old name -> new name.
+LEGACY_DEFENSE_NAMES = {d.replace("tracklimits", "mcp_guard", 1): d for d in DEFENSES if d.startswith("tracklimits")}
+
+
+def resolve_defense(name: str) -> str:
+    """A defense name, old (mcp_guard...) or new (tracklimits...), as its current name."""
+    if name in DEFENSES:
+        return name
+    if name in LEGACY_DEFENSE_NAMES:
+        return LEGACY_DEFENSE_NAMES[name]
+    raise ValueError(f"unknown defense {name!r}; one of {DEFENSES} (or an old mcp_guard... name)")
 
 
 def policy_for(defense: str, policy_path=DEFAULT_POLICY_PATH) -> Policy:
     """The policy a guard defense uses: the YAML policy, changed for taint mode or an ablation."""
+    defense = resolve_defense(defense)
     policy = Policy.from_yaml(policy_path)
-    if defense == "mcp_guard_taint":
+    if defense == "tracklimits_taint":
         policy = policy.with_mode("taint")
     if defense in ABLATIONS:
         policy = ABLATIONS[defense](policy)
@@ -233,6 +248,7 @@ def policy_for(defense: str, policy_path=DEFAULT_POLICY_PATH) -> Policy:
 def build_pipeline(llm: OpenAILLM | BasePipelineElement, name: str, defense: str = "none",
                    policy_path=DEFAULT_POLICY_PATH) -> tuple[AgentPipeline, Guard | None]:
     """Returns (pipeline, guard_or_None). `name` must contain an agentdojo.models.MODEL_NAMES key."""
+    defense = resolve_defense(defense)
     sys_msg = load_system_message(None)
     guard = None
     raw_llm = llm

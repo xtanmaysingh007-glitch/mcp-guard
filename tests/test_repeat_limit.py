@@ -13,7 +13,7 @@ import pytest
 from agentdojo.agent_pipeline.base_pipeline_element import BasePipelineElement
 from agentdojo.functions_runtime import EmptyEnv, FunctionsRuntime
 
-from mcp_guard.agentdojo_adapter import REPEAT_LIMIT_NOTE, StopOnRepeatLimit, build_pipeline
+from tracklimits.agentdojo_adapter import REPEAT_LIMIT_NOTE, StopOnRepeatLimit, build_pipeline
 
 
 def server_error(message):
@@ -48,7 +48,7 @@ def test_other_server_errors_still_raise():
         StopOnRepeatLimit(FailingLLM("model crashed")).query("hi", FunctionsRuntime([]))
 
 
-@pytest.mark.parametrize("defense", ["none", "mcp_guard", "mcp_guard_confirm_oracle"])
+@pytest.mark.parametrize("defense", ["none", "tracklimits", "tracklimits_confirm_oracle"])
 def test_pipelines_end_the_task_instead_of_crashing(defense):
     llm = FailingLLM("prediction aborted, token repeat limit reached")
     pipeline, _ = build_pipeline(llm, "local-test", defense)

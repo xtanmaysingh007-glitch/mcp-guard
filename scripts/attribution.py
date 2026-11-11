@@ -123,7 +123,10 @@ def main():
             if not files:
                 continue
             found_any = True
-            label = f"{defense} {rep}{tag}"
+            # folders from before the 2026-11-11 rename keep the old defense name (mcp_guard...)
+            shown = (f"{defense} (= tracklimits{defense[len('mcp_guard'):]})" if defense.startswith("mcp_guard")
+                     else defense)
+            label = f"{shown} {rep}{tag}"
             c = Counter()
             for f in files:
                 out, why = classify(f, canaries)

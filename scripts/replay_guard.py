@@ -7,8 +7,8 @@ Caveat: the calls are forced from the log. If the guard now refuses a call the m
 can't show what the model would have done next; only a live rerun shows that.
 
 usage: python scripts/replay_guard.py <log.json> <defense>
-  e.g. python scripts/replay_guard.py runs/mcp_guard/.../user_task_20/tool_knowledge/injection_task_1.json mcp_guard
-  defense: mcp_guard, mcp_guard_taint, mcp_guard_confirm_{no,yes,oracle}, mcp_guard_no_trusted, mcp_guard_no_links
+  e.g. python scripts/replay_guard.py runs/tracklimits/.../user_task_20/tool_knowledge/injection_task_1.json tracklimits
+  defense: tracklimits, tracklimits_taint, tracklimits_confirm_{no,yes,oracle}, tracklimits_no_trusted, tracklimits_no_links
 """
 import argparse
 import json
@@ -16,8 +16,8 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-from mcp_guard.agentdojo_adapter import CONFIRM_USERS, GUARD_DEFENSES, policy_for  # noqa: E402
-from mcp_guard.guard import Guard  # noqa: E402
+from tracklimits.agentdojo_adapter import CONFIRM_USERS, GUARD_DEFENSES, LEGACY_DEFENSE_NAMES, policy_for, resolve_defense  # noqa: E402
+from tracklimits.guard import Guard  # noqa: E402
 
 
 def text(content) -> str:
@@ -30,6 +30,7 @@ def text(content) -> str:
 def replay(log_path: str, defense: str) -> dict:
     log = json.loads(Path(log_path).read_text(encoding="utf-8"))
     msgs = log["messages"]
+    defense = resolve_defense(defense)          # old mcp_guard... names (frozen logs) work too
     guard = Guard(policy_for(defense), confirm_fn=CONFIRM_USERS.get(defense))
     guard.start_session(text(next(m for m in msgs if m["role"] == "user")["content"]))
 
@@ -53,7 +54,8 @@ def replay(log_path: str, defense: str) -> dict:
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("log", help="one injection_task_N.json (or none.json) from runs/")
-    ap.add_argument("defense", choices=GUARD_DEFENSES)
+    ap.add_argument("defense", choices=[*GUARD_DEFENSES, *(k for k, v in LEGACY_DEFENSE_NAMES.items() if v in GUARD_DEFENSES)],
+                    metavar="DEFENSE", help="tracklimits, tracklimits_confirm_oracle, ... (old mcp_guard... names work too)")
     a = ap.parse_args()
     print(f"== {a.defense}: {a.log}")
     print("stats:", replay(a.log, a.defense))

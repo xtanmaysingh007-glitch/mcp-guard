@@ -16,8 +16,8 @@ from agentdojo.attacks.attack_registry import load_attack
 from agentdojo.functions_runtime import FunctionCall, FunctionsRuntime
 from agentdojo.task_suite.load_suites import get_suite
 
-from mcp_guard import agentdojo_clock as clock
-from mcp_guard.agentdojo_clock import FROZEN_START, freeze_clock, reset_clock, unfreeze_clock
+from tracklimits import agentdojo_clock as clock
+from tracklimits.agentdojo_clock import FROZEN_START, freeze_clock, reset_clock, unfreeze_clock
 
 
 @pytest.fixture(autouse=True)
@@ -142,7 +142,7 @@ def test_every_pipeline_restarts_the_clock_per_task():
     from agentdojo.agent_pipeline.base_pipeline_element import BasePipelineElement
     from agentdojo.functions_runtime import EmptyEnv
     from agentdojo.types import text_content_block_from_string
-    from mcp_guard.agentdojo_adapter import build_pipeline
+    from tracklimits.agentdojo_adapter import build_pipeline
 
     class SendsOnce(BasePipelineElement):
         name = "local-test"
@@ -157,7 +157,7 @@ def test_every_pipeline_restarts_the_clock_per_task():
             return query, runtime, env, [*messages, msg], extra_args
 
     freeze_clock()
-    for defense in ["none", "mcp_guard", "mcp_guard_confirm_oracle"]:
+    for defense in ["none", "tracklimits", "tracklimits_confirm_oracle"]:
         stamps = []
         for _ in range(2):
             suite, env, rt = workspace()
@@ -176,7 +176,7 @@ def test_run_batch_passes_the_flag_to_every_run(monkeypatch):
     cmds = []
     monkeypatch.setattr(run_batch.subprocess, "call", lambda cmd, **kw: cmds.append(cmd) or 0)
     monkeypatch.setattr(run_batch, "unload_models", lambda: None)
-    monkeypatch.setattr(sys, "argv", ["run_batch.py", "--suite", "workspace", "--defenses", "none", "mcp_guard",
+    monkeypatch.setattr(sys, "argv", ["run_batch.py", "--suite", "workspace", "--defenses", "none", "tracklimits",
                                       "--freeze-clock"])
     run_batch.main()
     assert len(cmds) == 2 and all("--freeze-clock" in c for c in cmds)

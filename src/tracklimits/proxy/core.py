@@ -73,7 +73,7 @@ class GuardedProxy:
         # One call at a time: the Guard's state (what was seen, what was approved) is not thread-safe, and a
         # result must be recorded before the next call is checked.
         self._lock = anyio.Lock()
-        self.server = Server("mcp-guard-proxy", on_list_tools=self._list_tools, on_call_tool=self._call_tool)
+        self.server = Server("tracklimits-proxy", on_list_tools=self._list_tools, on_call_tool=self._call_tool)
 
     async def _list_tools(self, ctx: ServerRequestContext, params: PaginatedRequestParams | None) -> ListToolsResult:
         # Forwarded as is (one page per request; the host follows next_cursor itself).

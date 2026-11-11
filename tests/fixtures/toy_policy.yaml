@@ -1,4 +1,4 @@
-# Policy for tests/toy_mcp_server.py, written the way `python -m mcp_guard init` asks: start from the
+# Policy for tests/toy_mcp_server.py, written the way `python -m tracklimits init` asks: start from the
 # skeleton (every tool unclassified, unknown_tools block), then move each tool into its sections.
 unknown_tools: block
 strict_trust: typed

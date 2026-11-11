@@ -4,12 +4,12 @@ Every setting the guard reads from a policy file, its default, and why. Three co
 they differ on purpose:
 
 - **built-in**: what you get when the key is missing from the YAML (or with `Policy()` in code);
-- **AgentDojo**: what `src/mcp_guard/policies/agentdojo.yaml` sets (all benchmark numbers use this file);
-- **`mcp-guard init`**: what the generated skeleton for a new MCP server starts with.
+- **AgentDojo**: what `src/tracklimits/policies/agentdojo.yaml` sets (all benchmark numbers use this file);
+- **`tracklimits init`**: what the generated skeleton for a new MCP server starts with.
 
-The proxy (`mcp-guard proxy`) also overrides a few things on top of the file, listed at the end.
+The proxy (`tracklimits proxy`) also overrides a few things on top of the file, listed at the end.
 
-| setting | built-in | AgentDojo | `mcp-guard init` |
+| setting | built-in | AgentDojo | `tracklimits init` |
 |---|---|---|---|
 | `mode` | `allowlist` | `allowlist` | `allowlist` |
 | `trusted_tools` | none | user's own account data, calendars, contacts, directories (see file) | none (you decide) |
@@ -40,7 +40,7 @@ taint exists for comparison.
 **`trusted_tools`**. Tools whose output is structured data the user owns (account details, the user's own
 calendar). Only *whole values* count (an email field, a list item), never an address buried in a sentence.
 Default empty: trusting a tool is a decision about who can write into it, so nobody gets trusted by accident.
-The ablation `mcp_guard_no_trusted` showed trusted tools buy utility, not security.
+The ablation `tracklimits_no_trusted` showed trusted tools buy utility, not security.
 
 **`weak_trusted_tools`**. Trusted tools an attacker *can* write into indirectly (a contact list built from
 received emails, channel names anyone can create). Must be a subset of `trusted_tools`. Their values count for

@@ -1,6 +1,6 @@
-"""Run the proxy (also `mcp-guard proxy ...` once installed):
+"""Run the proxy (also `tracklimits proxy ...` once installed):
 
-    python -m mcp_guard.proxy --policy policy.yaml --user-request-file request.txt \
+    python -m tracklimits.proxy --policy policy.yaml --user-request-file request.txt \
         [--audit-log audit.jsonl] [--confirm auto|terminal|none] [--prompt-timeout 120] \
         -- <command that starts the real MCP server> [its args...]
 
@@ -22,12 +22,12 @@ from .core import GuardedProxy, load_proxy_policy
 
 def build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(
-        prog="mcp-guard proxy",
+        prog="tracklimits proxy",
         description="Run the guard between an MCP host and a real MCP server. Everything after -- is the real "
                     "server's command; the host starts this command instead of the server's.",
-        epilog="example: mcp-guard proxy --policy policy.yaml --user-request-file request.txt "
+        epilog="example: tracklimits proxy --policy policy.yaml --user-request-file request.txt "
                "--audit-log audit.jsonl -- python my_server.py   (see docs/proxy.md)")
-    ap.add_argument("--policy", required=True, help="policy YAML (start from `mcp-guard init`)")
+    ap.add_argument("--policy", required=True, help="policy YAML (start from `tracklimits init`)")
     ap.add_argument("--user-request-file", required=True,
                     help="text file with the user's current request; re-read on every call")
     ap.add_argument("--audit-log", help="JSON-lines file, one line per decision")

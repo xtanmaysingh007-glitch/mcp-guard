@@ -3,9 +3,9 @@
 AgentDojo caches every finished task in runs/<defense>/..., so re-running a failed command only
 redoes the unfinished tasks. This wrapper loops until each run completes (or gives up).
 
-  python scripts/run_batch.py --suite banking --defenses none mcp_guard
-  python scripts/run_batch.py --suite workspace --defenses none mcp_guard --n-inj 3
-  python scripts/run_batch.py --suite banking --defenses none mcp_guard --reps 3 --attack tool_knowledge
+  python scripts/run_batch.py --suite banking --defenses none tracklimits
+  python scripts/run_batch.py --suite workspace --defenses none tracklimits --n-inj 3
+  python scripts/run_batch.py --suite banking --defenses none tracklimits --reps 3 --attack tool_knowledge
 """
 import argparse
 import os
@@ -17,6 +17,12 @@ from pathlib import Path
 import httpx
 
 HERE = Path(__file__).parent
+
+
+def resolve_defense(name: str) -> str:
+    """Old defense names (mcp_guard..., before the 2026-11-11 rename) -> the new ones (tracklimits...).
+    run_agentdojo.py validates the result."""
+    return "tracklimits" + name[len("mcp_guard"):] if name.startswith("mcp_guard") else name
 
 
 def child_env() -> dict:
@@ -57,7 +63,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--provider", default="ollama")
     ap.add_argument("--suite", default="banking")
-    ap.add_argument("--defenses", nargs="+", default=["none", "mcp_guard"])
+    ap.add_argument("--defenses", nargs="+", default=["none", "tracklimits"])
     ap.add_argument("--model", default=None, help="passed through to run_agentdojo.py")
     ap.add_argument("--reps", type=int, default=1, help="run each defense this many times")
     ap.add_argument("--freeze-clock", action="store_true",
@@ -71,7 +77,7 @@ def main():
 
     status = {}
     for rep in range(1, args.reps + 1):
-      for d in args.defenses:
+      for d in map(resolve_defense, args.defenses):
         key = f"{d} rep{rep}"
         # one time budget per defense, shared by all its retries, so retries can't stretch the worst case
         deadline = time.monotonic() + args.run_timeout * 3600

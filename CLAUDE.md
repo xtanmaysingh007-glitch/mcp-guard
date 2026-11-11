@@ -1,9 +1,11 @@
 # Project context (read this first)
 
 Owner: Tanmay (GitHub: xtanmaysingh007-glitch), Windows PC, IST. This is a resume project.
-Repo: `mcp-guard` (working name; another repo `SaravanaGuhan/mcp-guard` is a different MCP server scanner, so rename later).
+Repo: `tracklimits` (github.com/xtanmaysingh007-glitch/tracklimits). TrackLimits, formerly mcp-guard (renamed
+2026-11-11; `SaravanaGuhan/mcp-guard` is an unrelated MCP server scanner, hence the rename).
 
 ## What it is
+Provenance-based prompt injection defense for LLM agent tool calls. Formerly mcp-guard.
 A lightweight, CaMeL-inspired, rule-based provenance guard that protects LLM agents from indirect prompt
 injection. It sits between the agent and its tools and checks every tool call's arguments: a guarded
 argument must trace to the user's request or to a trusted tool's whole-value output (default-deny
@@ -26,13 +28,13 @@ argument must trace to the user's request or to a trusted tool's whole-value out
   run_batch --run-timeout (hours per defense IN TOTAL across retries, default 2; then skip it).
 
 ## Layout
-- `src/mcp_guard/provenance.py` - where did a value come from (user / trusted tool / untrusted)
-- `src/mcp_guard/policy.py`, `policies/agentdojo.yaml` - trusted tools, guarded args, link checks, confirmable
+- `src/tracklimits/provenance.py` - where did a value come from (user / trusted tool / untrusted)
+- `src/tracklimits/policy.py`, `policies/agentdojo.yaml` - trusted tools, guarded args, link checks, confirmable
   tools, user_identities (the user's own address, counts as user-given every session; 2026-11-08),
   always_confirm (tools that always go to the user even with clean args, plain mode blocks them): delete_file,
   delete_email, cancel_calendar_event, reschedule_calendar_event (2026-11-08). They take only IDs, and an ID
   can't be traced: file 13 from an injection looks like file 11 from the user.
-- `src/mcp_guard/guard.py` - allow / block / (confirm mode) ask the user. Retry cap (2026-11-08): the same
+- `src/tracklimits/guard.py` - allow / block / (confirm mode) ask the user. Retry cap (2026-11-08): the same
   (tool, args) plainly blocked gets the normal reason twice, then "blocked: this call was already refused.
   Do not retry it or look for another way." (PLAIN_BLOCK_RETRIES = 2; every try still counts as a block).
   Since the adaptive fixes (2026-11-08): approvals are scoped to (tool, arg, canonical value) and kept apart
@@ -47,12 +49,15 @@ argument must trace to the user's request or to a trusted tool's whole-value out
   results before that used value everywhere); call = a yes covers one
   exact call once (SHA-256 of tool + call_canonical args, URL query kept); Guard.approve_call(...) stores an
   approval ahead of the call, one use, expires after approval_ttl_calls (5) checked calls.
-- `src/mcp_guard/provenance.py` normalize(): zero-width, NFKC, defang (hxxp, [.], [at], "x at y dot com"),
+- `src/tracklimits/provenance.py` normalize(): zero-width, NFKC, defang (hxxp, [.], [at], "x at y dot com"),
   percent-decoding, split-line joining, bare domains (common TLDs only), loose IBANs, base64. Only ADDS atoms
   (raw atoms are always kept). URL atoms compare without scheme / www / trailing slash (path+query kept).
-- `src/mcp_guard/agentdojo_adapter.py` - defenses: none, mcp_guard, mcp_guard_taint,
-  mcp_guard_confirm_{no,yes,oracle}, mcp_guard_no_trusted, mcp_guard_no_links (ablations),
-  spotlighting, repeat_user_prompt, tool_filter
+- `src/tracklimits/agentdojo_adapter.py` - defenses: none, tracklimits, tracklimits_taint,
+  tracklimits_confirm_{no,yes,oracle}, tracklimits_no_trusted, tracklimits_no_links (ablations),
+  spotlighting, repeat_user_prompt, tool_filter. OLD NAMES (mcp_guard, mcp_guard_confirm_oracle, ...: every
+  result below that names a defense was recorded under them) still work: LEGACY_DEFENSE_NAMES /
+  resolve_defense in the adapter, used by policy_for, build_pipeline, run_agentdojo, replay_guard; run_batch and
+  attribution map mcp_guard... -> tracklimits... by name (attribution prints "mcp_guard (= tracklimits)").
 - `scripts/run_agentdojo.py` (--no-attack = clean utility only, own summary file; --user-tasks 4 13 ... =
   pick tasks by number), `scripts/run_batch.py` (--reps, retries, --run-timeout), `scripts/attribution.py`
   (canaries for banking, slack, travel, workspace)
@@ -63,7 +68,7 @@ argument must trace to the user's request or to a trusted tool's whole-value out
 - `tests/test_oracle_audit.py` - every injection task's ground-truth calls through the oracle in a fresh session:
   every acting call must be refused (35 tasks; travel inj 2 and 4 are strict xfail = guard gaps) + hand-written
   workspace inj 11-13 actions (no ground truth in AgentDojo)
-- `src/mcp_guard/init_policy.py` + `__main__.py` - `python -m mcp_guard init tools.json -o policy.yaml`: policy
+- `src/tracklimits/init_policy.py` + `__main__.py` - `python -m tracklimits init tools.json -o policy.yaml`: policy
   skeleton from an MCP tool list, every tool "unclassified", unknown_tools block (tests/test_init_policy.py)
 - `tests/test_executor.py` - through GuardedToolsExecutor with a stub tool: blocked / declined never run it,
   allowed / approved run it exactly once, unknown tool runs only under allow
@@ -470,7 +475,7 @@ same commit (logs record refusals, not asks); exact for clean logs, at most +1 o
   inj2 (inj0 differs between defenses because the guard blocks the attacker's email, as it should).
   Left: AgentDojo's wall-clock timestamps (emails/files) still reach the model -> --freeze-clock below.
 - --freeze-clock (commit fa2c618, 2026-11-10, default OFF; tests/test_freeze_clock.py, red first):
-  src/mcp_guard/agentdojo_clock.py (benchmark only; guard/proxy never import it). AgentDojo 0.1.35 stamps with
+  src/tracklimits/agentdojo_clock.py (benchmark only; guard/proxy never import it). AgentDojo 0.1.35 stamps with
   datetime.now() in exactly 4 places, all workspace: send_email (new email's timestamp), create_file
   (last_modified), append_to_file (last_modified of the changed file), Email model default timestamp (unused by
   the suite's own data: all 32 inbox emails have one). Calendar events take times from the call's args; slack,
@@ -527,9 +532,9 @@ Then: 4. Repeats on key numbers (the freeze runs above are the current-guard num
 strict_trust off and value scope). 6. Rename, README (his voice), CI, LICENSE, limitations section.
 
 ## MCP proxy (built 2026-11-10, docs/proxy.md)
-- `src/mcp_guard/proxy/` (core.py GuardedProxy, confirm.py terminal prompt, __main__.py CLI), ~300 lines, imports
+- `src/tracklimits/proxy/` (core.py GuardedProxy, confirm.py terminal prompt, __main__.py CLI), ~300 lines, imports
   only guard / policy / provenance. Needs MCP SDK 2.x: `pip install -r requirements-proxy.txt` (kept out of
-  requirements.txt so Kaggle runs don't pull it). `python -m mcp_guard.proxy --policy P --user-request-file F
+  requirements.txt so Kaggle runs don't pull it). `python -m tracklimits.proxy --policy P --user-request-file F
   [--audit-log A] [--confirm auto|terminal|none] [--prompt-timeout 120] -- <server command>`.
 - tools/list forwarded unchanged (descriptions never reach the guard); tools/call: Guard.check_call (in a
   worker thread, one call at a time), blocked/declined -> isError result, never forwarded; allowed ->
@@ -566,24 +571,24 @@ Design notes still open:
   in ONE prompt (approve / decline each) instead of one prompt per call. Replay of the F1 oracle logs: with
   P2 it would take clean slack from 1.48 to 0.95 prompts per task (P2+P3 = 0.95 vs 2.38 before P2), 0
   attacker calls allowed. Not done in the AgentDojo harness (it asks per call); belongs in the proxy UI.
-- unknown_tools: block, with `python -m mcp_guard init` to write the starting policy.
+- unknown_tools: block, with `python -m tracklimits init` to write the starting policy.
 - Async approval: block the call, show it to the user, let the agent retry; Guard.approve_call stores the
   yes (one use, expires after approval_ttl_calls).
 
 ## Packaging (2026-11-10)
-pyproject.toml (setuptools>=77, SPDX license MIT + LICENSE): package mcp-guard 0.1.0, Python >=3.10, core dep only
+pyproject.toml (setuptools>=77, SPDX license MIT + LICENSE): package tracklimits 0.1.0, Python >=3.10, core dep only
 pyyaml>=6,<7; extras: proxy = mcp>=2.3,<3; agentdojo = agentdojo==0.1.35 (pinned: all results), openai>=1.50,<4,
-httpx>=0.27,<1, python-dotenv>=1,<2; test = pytest>=8,<10. Console script mcp-guard = mcp_guard.cli:main
-(subcommands init, proxy; `mcp-guard proxy` without the SDK says how to install it). requirements.txt stays for
+httpx>=0.27,<1, python-dotenv>=1,<2; test = pytest>=8,<10. Console script tracklimits = tracklimits.cli:main
+(subcommands init, proxy; `tracklimits proxy` without the SDK says how to install it). requirements.txt stays for
 the Kaggle cells. tests/test_cli.py: core imports with agentdojo/mcp/openai made unimportable, proxy without
 agentdojo, help texts, entry point registered, installed command init + proxy end to end. Fresh venv
 `pip install -e ".[proxy,test]"` (no agentdojo): install clean (no warnings), 29 passed / 3 skipped. The 3 skips:
-this laptop's Windows Application Control blocks pip's unsigned mcp-guard.exe launcher (WinError 4551, also from
+this laptop's Windows Application Control blocks pip's unsigned tracklimits.exe launcher (WinError 4551, also from
 PowerShell); the tests skip ONLY on that error; CI runs them on clean runners.
 
 ## CI (2026-11-10)
 .github/workflows/tests.yml on push + pull_request: job core = ubuntu + windows x Python 3.10/3.11/3.12,
-`pip install -e ".[proxy,test]"` (no AgentDojo), `mcp-guard --help`, pytest; job agentdojo = ubuntu x 3.10/3.12
+`pip install -e ".[proxy,test]"` (no AgentDojo), `tracklimits --help`, pytest; job agentdojo = ubuntu x 3.10/3.12
 with the agentdojo extra, pytest. No model anywhere. tests/conftest.py drops the 7 test files that import
 AgentDojo at the top and skips @pytest.mark.agentdojo tests (22 in test_guard.py) when it isn't installed.
 Local fresh venv without AgentDojo: 75 passed, 25 skipped. tests/test_repo_hygiene.py: git check-ignore must
@@ -598,7 +603,7 @@ added per call (p95 10.0 vs 4.0 ms); most of it is the extra process hop and JSO
 One machine, one run; a human answering a prompt dwarfs all of this.
 
 ## Cleanup (2026-11-10)
-docs/settings.md: every policy setting with its built-in / AgentDojo / `mcp-guard init` default and why, the
+docs/settings.md: every policy setting with its built-in / AgentDojo / `tracklimits init` default and why, the
 fixed constants (PLAIN_BLOCK_RETRIES, MAX_DECLINES) and what the proxy overrides. strict_trust fallback FIXED
 2026-11-11 (commit after 182d329, tests/test_guard.py::test_strict_trust_is_fail_safe..., red first): a policy
 file that leaves strict_trust out, or writes it with no value, and Policy() now get typed (fail-safe); before,
@@ -606,9 +611,20 @@ they silently got off. off needs `strict_trust: off` / `false`. No frozen number
 the toy policy set typed explicitly, and no other test relied on the off fallback. Removed dead code:
 scripts/run_baseline.py (deprecated shim, unreferenced) and an unused agentdojo_clock.is_frozen; an AST scan of
 src/ and scripts/ found nothing else unreferenced. Every script's --help now shows its docstring;
-`python -m mcp_guard` = the mcp-guard command (init + proxy). Final full pass (with AgentDojo installed):
+`python -m tracklimits` = the tracklimits command (init + proxy). Final full pass (with AgentDojo installed):
 238 passed, 3 skipped (WDAC-blocked launcher), 8 xfailed (known gaps), 1 warning (AgentDojo's own, from the
 repeat_user_prompt defense re-adding the query).
+
+## Rename mcp-guard -> TrackLimits (2026-11-11)
+Display TrackLimits; distribution / repo / import package / console command `tracklimits`; env prefix TRACKLIMITS_
+(no MCP_GUARD_* env vars existed). src/mcp_guard -> src/tracklimits, every import, pyproject (name, entry point,
+package data), scripts, tests, CI, docs; defense names mcp_guard* -> tracklimits*; proxy server name
+"tracklimits-proxy"; prompt header "=== tracklimits: ...". NOT renamed: the frozen run folders / logs and the
+defense names stored in them (runs/ is git-ignored), and the defense names in the result write-ups in this file
+(they are what the runs were recorded as). Old names resolve everywhere (tests/test_rename.py: alias map,
+adapter, run_batch, run_agentdojo, replay of an old log, attribution label). GitHub repo renamed by Tanmay;
+origin -> https://github.com/xtanmaysingh007-glitch/tracklimits.git (the old URL redirects, so old Kaggle cells
+still clone). README / docs say "Formerly mcp-guard." and carry a note on the old defense names.
 
 ## Kaggle recipe (free, runs without the laptop)
 Notebook with GPU T4 x2, Internet on, ONE cell: install zstd/pciutils, `curl ollama.com/install.sh | sh`,

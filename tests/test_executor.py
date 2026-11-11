@@ -8,8 +8,8 @@ runs exactly once.
 import pytest
 from agentdojo.functions_runtime import EmptyEnv, FunctionCall, FunctionsRuntime, make_function
 
-from mcp_guard.agentdojo_adapter import GuardedToolsExecutor, policy_for
-from mcp_guard.guard import Guard
+from tracklimits.agentdojo_adapter import GuardedToolsExecutor, policy_for
+from tracklimits.guard import Guard
 
 RAN = []   # every real execution of the stub tool lands here
 
@@ -39,12 +39,12 @@ def run_one_call(guard, recipient, user_query="Email alice@corp.com the notes.")
 
 
 def plain_guard():
-    return Guard(policy_for("mcp_guard"))
+    return Guard(policy_for("tracklimits"))
 
 
 def confirm_guard(answer):
     asks = []
-    g = Guard(policy_for("mcp_guard_confirm_oracle"), confirm_fn=lambda tool, args, bad: asks.append(tool) or answer)
+    g = Guard(policy_for("tracklimits_confirm_oracle"), confirm_fn=lambda tool, args, bad: asks.append(tool) or answer)
     return g, asks
 
 
@@ -84,7 +84,7 @@ def test_unknown_tool_runs_only_when_allowed(unknown_tools, runs):
         return "ok"
 
     RAN.clear()
-    g = Guard(policy_for("mcp_guard").with_unknown_tools(unknown_tools))
+    g = Guard(policy_for("tracklimits").with_unknown_tools(unknown_tools))
     g.start_session("do it")
     runtime = FunctionsRuntime([make_function(stub_unknown)])
     call = FunctionCall(function="stub_unknown", id="c", args={"note": "x"})

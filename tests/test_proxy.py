@@ -1,4 +1,4 @@
-"""End-to-end tests for the MCP proxy (src/mcp_guard/proxy/), with a real MCP server (tests/toy_mcp_server.py)
+"""End-to-end tests for the MCP proxy (src/tracklimits/proxy/), with a real MCP server (tests/toy_mcp_server.py)
 spawned over stdio and no model: a scripted "agent" makes the calls a hijacked agent would make.
 
 Most tests run the proxy in-process (an in-memory MCP client talks to it) so a test can plug in its own
@@ -19,7 +19,7 @@ import anyio  # noqa: E402
 import yaml  # noqa: E402
 from mcp import Client, StdioServerParameters  # noqa: E402
 
-from mcp_guard.proxy import GuardedProxy, TerminalConfirm, format_prompt, load_proxy_policy  # noqa: E402
+from tracklimits.proxy import GuardedProxy, TerminalConfirm, format_prompt, load_proxy_policy  # noqa: E402
 
 HERE = Path(__file__).parent
 TOY = str(HERE / "toy_mcp_server.py")
@@ -227,11 +227,11 @@ def test_terminal_confirm_only_yes_approves_and_silence_expires():
 
 
 def test_stdio_end_to_end(tmp_path):
-    """Real processes: an MCP client spawns the proxy (python -m mcp_guard.proxy), which spawns the toy server."""
+    """Real processes: an MCP client spawns the proxy (python -m tracklimits.proxy), which spawns the toy server."""
     req = tmp_path / "request.txt"
     req.write_text("Summarize my inbox", encoding="utf-8")
     env = {**toy_env(tmp_path), "PYTHONPATH": REPO_SRC}
-    args = ["-m", "mcp_guard.proxy", "--policy", str(POLICY), "--user-request-file", str(req),
+    args = ["-m", "tracklimits.proxy", "--policy", str(POLICY), "--user-request-file", str(req),
             "--audit-log", str(tmp_path / "audit.jsonl"), "--confirm", "none", "--", sys.executable, TOY]
 
     async def main():

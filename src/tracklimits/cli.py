@@ -1,20 +1,20 @@
-"""The `mcp-guard` command (installed by pyproject.toml):
+"""The `tracklimits` command (installed by pyproject.toml):
 
-    mcp-guard init tools.json -o policy.yaml      write a policy skeleton from an MCP tool list (init_policy.py)
-    mcp-guard proxy --policy P --user-request-file F [options] -- <server command>   run the guard proxy
+    tracklimits init tools.json -o policy.yaml      write a policy skeleton from an MCP tool list (init_policy.py)
+    tracklimits proxy --policy P --user-request-file F [options] -- <server command>   run the guard proxy
 
-The proxy needs the MCP SDK (`pip install "mcp-guard[proxy]"`); init and the guard itself don't.
+The proxy needs the MCP SDK (`pip install "tracklimits[proxy]"`); init and the guard itself don't.
 """
 from __future__ import annotations
 
 import sys
 
-USAGE = """usage: mcp-guard {init,proxy} ...
+USAGE = """usage: tracklimits {init,proxy} ...
 
   init    write a policy skeleton from an MCP tools/list JSON (every tool unclassified, unknown tools blocked)
   proxy   put the guard between an MCP host and a real MCP server (needs the [proxy] extra)
 
-run `mcp-guard init --help` or `mcp-guard proxy --help` for the options."""
+run `tracklimits init --help` or `tracklimits proxy --help` for the options."""
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -30,7 +30,7 @@ def main(argv: list[str] | None = None) -> int:
         try:
             from .proxy.__main__ import main as proxy_main
         except ImportError as e:        # the MCP SDK isn't installed
-            print(f"mcp-guard proxy needs the MCP SDK ({e}). Install it with: pip install \"mcp-guard[proxy]\"",
+            print(f"tracklimits proxy needs the MCP SDK ({e}). Install it with: pip install \"tracklimits[proxy]\"",
                   file=sys.stderr)
             return 1
         proxy_main(rest)

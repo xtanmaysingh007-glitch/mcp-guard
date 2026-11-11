@@ -18,7 +18,7 @@ import warnings
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-from mcp_guard.policy import DEFAULT_POLICY_PATH, Policy  # noqa: E402
+from tracklimits.policy import DEFAULT_POLICY_PATH, Policy  # noqa: E402
 
 from agentdojo.attacks.attack_registry import load_attack
 from agentdojo.task_suite.load_suites import get_suite

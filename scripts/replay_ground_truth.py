@@ -1,4 +1,4 @@
-"""Offline evaluation of MCP Guard on AgentDojo ground-truth traces. No LLM needed.
+"""Offline evaluation of TrackLimits on AgentDojo ground-truth traces. No LLM needed.
 
 Two idealised agents:
   honest agent   - executes exactly the reference solution of each user task (clean environment).
@@ -26,8 +26,8 @@ from agentdojo.base_tasks import BaseInjectionTask, BaseUserTask
 from agentdojo.functions_runtime import FunctionsRuntime
 from agentdojo.task_suite.load_suites import get_suite
 
-from mcp_guard.guard import Guard
-from mcp_guard.policy import DEFAULT_POLICY_PATH, Policy
+from tracklimits.guard import Guard
+from tracklimits.policy import DEFAULT_POLICY_PATH, Policy
 
 BENCH_VERSION = "v1.2.2"
 

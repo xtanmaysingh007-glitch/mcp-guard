@@ -18,7 +18,7 @@ from typing import Callable
 
 def format_prompt(tool: str, args: dict, bad: dict[str, list[str]]) -> str:
     """What the user sees: the tool, the exact arguments that will be sent, and why they are being asked."""
-    lines = ["", "=== mcp-guard: a tool call is waiting for your OK ===",
+    lines = ["", "=== tracklimits: a tool call is waiting for your OK ===",
              f"tool: {tool}",
              "arguments (exactly what will be sent if you approve):",
              json.dumps(args, indent=2, ensure_ascii=False)]
@@ -111,4 +111,4 @@ def _windows_console():
 
 def stderr_note(text: str) -> None:
     """Notes for whoever runs the proxy (the host usually logs our stderr)."""
-    print(f"mcp-guard proxy: {text}", file=sys.stderr, flush=True)
+    print(f"tracklimits proxy: {text}", file=sys.stderr, flush=True)

@@ -13,10 +13,10 @@ from agentdojo.agent_pipeline.tool_execution import tool_result_to_str
 from agentdojo.functions_runtime import FunctionsRuntime
 from agentdojo.task_suite.load_suites import get_suite
 
-from mcp_guard.agentdojo_adapter import CONFIRM_USERS, policy_for
-from mcp_guard.guard import Guard
+from tracklimits.agentdojo_adapter import CONFIRM_USERS, policy_for
+from tracklimits.guard import Guard
 
-ORACLE = "mcp_guard_confirm_oracle"
+ORACLE = "tracklimits_confirm_oracle"
 SUITES = ("banking", "slack", "travel", "workspace")
 NEUTRAL_REQUEST = "Please help me with my tasks for today."
 
@@ -146,6 +146,6 @@ def test_oracle_refuses_the_ransom_note_to_self():
 
 def test_oracle_attacker_number_matches_only_a_whole_digit_run():
     """0123456789 is inside banking user_task_0's real IBAN UK12345678901234567890: that must not count."""
-    from mcp_guard.agentdojo_adapter import _oracle
+    from tracklimits.agentdojo_adapter import _oracle
     assert _oracle("send_money", {"recipient": "UK12345678901234567890", "amount": 98.7}, {}) is True
     assert _oracle("send_email", {"recipients": ["x@y.com"], "body": "IBAN 0123456789"}, {}) is False

@@ -1,6 +1,6 @@
-"""The `mcp-guard` command (pyproject console script) and the dependency boundaries.
+"""The `tracklimits` command (pyproject console script) and the dependency boundaries.
 
-- `mcp-guard init` and `mcp-guard proxy` work from the installed command (skipped when it isn't installed, e.g.
+- `tracklimits init` and `tracklimits proxy` work from the installed command (skipped when it isn't installed, e.g.
   a plain checkout without `pip install -e .`; CI installs it).
 - The core (guard, policy, provenance, init) needs neither AgentDojo nor the MCP SDK, and the proxy doesn't need
   AgentDojo: imports are run in a fresh interpreter with those packages made unimportable.
@@ -18,18 +18,18 @@ HERE = Path(__file__).parent
 SRC = str(HERE.parent / "src")
 TOY = str(HERE / "toy_mcp_server.py")
 POLICY = str(HERE / "fixtures" / "toy_policy.yaml")
-INSTALLED = shutil.which("mcp-guard")
-needs_install = pytest.mark.skipif(INSTALLED is None, reason="mcp-guard not installed (pip install -e .)")
+INSTALLED = shutil.which("tracklimits")
+needs_install = pytest.mark.skipif(INSTALLED is None, reason="tracklimits not installed (pip install -e .)")
 
 
 def run(cmd, **kw):
     try:
         return subprocess.run(cmd, capture_output=True, text=True, timeout=120, **kw)
     except OSError as e:
-        # Windows Application Control (WDAC) on the dev laptop refuses pip's unsigned mcp-guard.exe launcher
+        # Windows Application Control (WDAC) on the dev laptop refuses pip's unsigned tracklimits.exe launcher
         # (WinError 4551). That's this machine's policy, not the package: CI runs these on clean runners.
         if getattr(e, "winerror", None) == 4551:
-            pytest.skip("Windows Application Control blocked the mcp-guard.exe launcher on this machine")
+            pytest.skip("Windows Application Control blocked the tracklimits.exe launcher on this machine")
         raise
 
 
@@ -53,8 +53,8 @@ def test_core_needs_neither_agentdojo_nor_mcp(tmp_path):
     tools.write_text(json.dumps({"tools": [{"name": "send_email"}]}))
     out = tmp_path / "p.yaml"
     r = py_without(["agentdojo", "mcp", "openai"], f"""
-import mcp_guard.guard, mcp_guard.policy, mcp_guard.provenance, mcp_guard.init_policy
-from mcp_guard.cli import main
+import tracklimits.guard, tracklimits.policy, tracklimits.provenance, tracklimits.init_policy
+from tracklimits.cli import main
 sys.exit(main(["init", {str(tools)!r}, "-o", {str(out)!r}]))
 """)
     assert r.returncode == 0, r.stderr
@@ -63,30 +63,30 @@ sys.exit(main(["init", {str(tools)!r}, "-o", {str(out)!r}]))
 
 def test_proxy_needs_no_agentdojo():
     pytest.importorskip("mcp")
-    r = py_without(["agentdojo", "openai"], "import mcp_guard.proxy, mcp_guard.proxy.__main__")
+    r = py_without(["agentdojo", "openai"], "import tracklimits.proxy, tracklimits.proxy.__main__")
     assert r.returncode == 0, r.stderr
 
 
 def test_proxy_without_the_sdk_says_how_to_install_it():
-    r = py_without(["mcp"], "from mcp_guard.cli import main\nsys.exit(main(['proxy', '--help']))")
+    r = py_without(["mcp"], "from tracklimits.cli import main\nsys.exit(main(['proxy', '--help']))")
     assert r.returncode != 0 and "pip install" in (r.stderr + r.stdout) and "proxy" in (r.stderr + r.stdout)
 
 
 def test_cli_module_help_lists_both_subcommands():
-    r = run([sys.executable, "-m", "mcp_guard.cli", "--help"], env={**os.environ, "PYTHONPATH": SRC})
+    r = run([sys.executable, "-m", "tracklimits.cli", "--help"], env={**os.environ, "PYTHONPATH": SRC})
     assert r.returncode == 0 and "init" in r.stdout and "proxy" in r.stdout
 
 
 def test_console_script_entry_point_is_registered():
-    """pip writes the mcp-guard launcher from this entry point; loading it must give cli.main."""
+    """pip writes the tracklimits launcher from this entry point; loading it must give cli.main."""
     from importlib.metadata import PackageNotFoundError, entry_points, version
     try:
-        version("mcp-guard")
+        version("tracklimits")
     except PackageNotFoundError:
-        pytest.skip("mcp-guard not installed (pip install -e .)")
-    (ep,) = [e for e in entry_points(group="console_scripts") if e.name == "mcp-guard"]
-    assert ep.value == "mcp_guard.cli:main"
-    from mcp_guard.cli import main
+        pytest.skip("tracklimits not installed (pip install -e .)")
+    (ep,) = [e for e in entry_points(group="console_scripts") if e.name == "tracklimits"]
+    assert ep.value == "tracklimits.cli:main"
+    from tracklimits.cli import main
     assert ep.load() is main
 
 
@@ -112,7 +112,7 @@ def test_installed_command_init_writes_a_blocking_skeleton(tmp_path):
 
 @needs_install
 def test_installed_command_proxy_blocks_the_poisoned_send(tmp_path):
-    """client -> `mcp-guard proxy` -> toy server, all real processes."""
+    """client -> `tracklimits proxy` -> toy server, all real processes."""
     pytest.importorskip("mcp")
     import anyio
     from mcp import Client, StdioServerParameters
@@ -134,7 +134,7 @@ def test_installed_command_proxy_blocks_the_poisoned_send(tmp_path):
         sent = anyio.run(main)
     except BaseException as e:          # the SDK spawns the launcher; its OSError may come wrapped in a group
         if _app_control_blocked(e):
-            pytest.skip("Windows Application Control blocked the mcp-guard.exe launcher on this machine")
+            pytest.skip("Windows Application Control blocked the tracklimits.exe launcher on this machine")
         raise
     assert sent.is_error
     ran = [json.loads(l)["tool"] for l in calls_log.read_text().splitlines()]

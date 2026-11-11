@@ -1,4 +1,8 @@
-# MCP Guard
+# TrackLimits
+
+Provenance-based prompt injection defense for LLM agent tool calls.
+
+Formerly mcp-guard.
 
 A security proxy that protects MCP-based AI agents from indirect prompt injection, evaluated on the
 AgentDojo benchmark (ETH Zurich, NeurIPS 2024).
@@ -42,7 +46,7 @@ ollama pull qwen2.5:7b
 ollama create qwen2.5-7b-16k -f Modelfile.qwen7b
 # in .env set: OLLAMA_MODEL=qwen2.5-7b-16k
 python scripts/run_agentdojo.py --provider ollama --suite banking --n-user 2 --n-inj 2 --defense none
-python scripts/run_agentdojo.py --provider ollama --suite banking --n-user 2 --n-inj 2 --defense mcp_guard
+python scripts/run_agentdojo.py --provider ollama --suite banking --n-user 2 --n-inj 2 --defense tracklimits
 ```
 
 ## Compute plan
@@ -52,7 +56,7 @@ python scripts/run_agentdojo.py --provider ollama --suite banking --n-user 2 --n
 
 Results are saved to `runs/<defense>/summary_*.json` (git-ignored).
 
-Defenses: `none`, `mcp_guard` (allowlist), `mcp_guard_taint`, `spotlighting`, `repeat_user_prompt`, `tool_filter`.
+Defenses: `none`, `tracklimits` (allowlist), `tracklimits_taint`, `spotlighting`, `repeat_user_prompt`, `tool_filter`.
 
 ## Offline evaluation (no model needed)
 
@@ -60,3 +64,7 @@ Defenses: `none`, `mcp_guard` (allowlist), `mcp_guard_taint`, `spotlighting`, `r
 python scripts/replay_ground_truth.py --mode allowlist --suites banking
 python -m pytest -q
 ```
+
+Results before the rename (2026-11-11) use the old defense names: `mcp_guard` = `tracklimits`,
+`mcp_guard_confirm_oracle` = `tracklimits_confirm_oracle`, and so on (`mcp_guard...` -> `tracklimits...`).
+The frozen run folders and logs keep the old names; every script accepts both.

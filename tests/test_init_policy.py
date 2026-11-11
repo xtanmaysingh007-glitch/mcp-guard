@@ -1,12 +1,12 @@
-"""`python -m mcp_guard init`: a policy skeleton from an MCP server's tool list."""
+"""`python -m tracklimits init`: a policy skeleton from an MCP server's tool list."""
 import json
 
 import pytest
 import yaml
 
-from mcp_guard.guard import Guard
-from mcp_guard.init_policy import load_tool_list, main, skeleton
-from mcp_guard.policy import Policy
+from tracklimits.guard import Guard
+from tracklimits.init_policy import load_tool_list, main, skeleton
+from tracklimits.policy import Policy
 
 TOOLS_LIST = {   # what an MCP server answers to tools/list
     "tools": [

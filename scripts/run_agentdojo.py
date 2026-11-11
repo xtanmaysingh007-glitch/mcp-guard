@@ -8,11 +8,11 @@ Reports (per suite):
 Examples (PowerShell, from the project folder, venv active):
   python scripts/run_agentdojo.py --provider stub   --suite workspace --n-user 2 --n-inj 2   # offline smoke test
   python scripts/run_agentdojo.py --provider ollama --suite banking --defense none
-  python scripts/run_agentdojo.py --provider ollama --suite banking --defense mcp_guard
-  python scripts/run_agentdojo.py --provider ollama --suite slack --defense mcp_guard --no-attack   # clean utility only
+  python scripts/run_agentdojo.py --provider ollama --suite banking --defense tracklimits
+  python scripts/run_agentdojo.py --provider ollama --suite slack --defense tracklimits --no-attack   # clean utility only
   python scripts/run_agentdojo.py --provider ollama --suite workspace --user-tasks 13 25 33 --n-inj 6   # chosen tasks
-Defenses: none, mcp_guard, mcp_guard_taint, mcp_guard_confirm_{no,yes,oracle},
-  mcp_guard_no_trusted, mcp_guard_no_links (ablations), spotlighting, repeat_user_prompt, tool_filter
+Defenses: none, tracklimits, tracklimits_taint, tracklimits_confirm_{no,yes,oracle},
+  tracklimits_no_trusted, tracklimits_no_links (ablations), spotlighting, repeat_user_prompt, tool_filter
 """
 import argparse
 import json
@@ -28,7 +28,7 @@ import openai
 from dotenv import load_dotenv
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-from mcp_guard.agentdojo_adapter import DEFENSES, build_pipeline  # noqa: E402
+from tracklimits.agentdojo_adapter import DEFENSES, LEGACY_DEFENSE_NAMES, resolve_defense, build_pipeline  # noqa: E402
 
 from agentdojo.agent_pipeline.base_pipeline_element import BasePipelineElement
 from agentdojo.agent_pipeline.llms.openai_llm import OpenAILLM
@@ -44,6 +44,8 @@ from agentdojo.benchmark import TaskResults
 # agentdojo 0.1.35 bug: loading cached results fails unless the model is rebuilt first
 TaskResults.model_rebuild()
 
+# old names (mcp_guard...) are accepted too and run under the new name; frozen results keep the old ones
+DEFENSE_CHOICES = [*DEFENSES, *LEGACY_DEFENSE_NAMES]
 BENCH_VERSION = "v1.2.2"
 GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
 
@@ -183,7 +185,8 @@ def main():
     ap.add_argument("--provider", choices=["stub", "gemini", "ollama"], required=True)
     ap.add_argument("--suite", choices=["workspace", "slack", "banking", "travel"], default="workspace")
     ap.add_argument("--attack", default="important_instructions")
-    ap.add_argument("--defense", choices=DEFENSES, default="none")
+    ap.add_argument("--defense", choices=DEFENSE_CHOICES, default="none", metavar="DEFENSE",
+                    help="none, tracklimits, tracklimits_confirm_oracle, ... (old mcp_guard... names work too)")
     ap.add_argument("--model", default=None, help="Ollama model name (overrides .env), e.g. qwen2.5-7b-16k")
     ap.add_argument("--n-user", type=int, default=None, help="only first N user tasks (saves API quota)")
     ap.add_argument("--user-tasks", nargs="+", default=None, metavar="N",
@@ -199,6 +202,7 @@ def main():
                          "runs/<defense>/clock-frozen/ and the summary says freeze_clock: true")
     ap.add_argument("--rep", type=int, default=1, help="repeat number; rep 2+ logs to runs/<defense>/rep<N> so it doesn't reuse the cache")
     args = ap.parse_args()
+    args.defense = resolve_defense(args.defense)
     if args.no_attack and args.skip_clean:
         ap.error("--no-attack and --skip-clean together would run nothing")
 
@@ -220,7 +224,7 @@ def main():
     except ValueError as e:
         ap.error(str(e))
     if args.freeze_clock:
-        from mcp_guard.agentdojo_clock import freeze_clock
+        from tracklimits.agentdojo_clock import freeze_clock
         freeze_clock()
     logdir = log_dir(args.defense, args.rep, args.freeze_clock)
     logdir.mkdir(parents=True, exist_ok=True)

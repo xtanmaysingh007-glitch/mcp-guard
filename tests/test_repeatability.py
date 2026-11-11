@@ -18,7 +18,7 @@ from agentdojo.agent_pipeline.base_pipeline_element import BasePipelineElement
 from agentdojo.functions_runtime import EmptyEnv, FunctionCall, FunctionsRuntime, make_function
 from agentdojo.types import text_content_block_from_string
 
-from mcp_guard.agentdojo_adapter import SortToolArgs, build_pipeline
+from tracklimits.agentdojo_adapter import SortToolArgs, build_pipeline
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 import run_batch  # noqa: E402
@@ -72,7 +72,7 @@ def test_sort_tool_args_sorts_keys_recursively():
     assert args == SCRAMBLED                       # same content, only the order changed
 
 
-@pytest.mark.parametrize("defense", ["none", "mcp_guard", "mcp_guard_confirm_oracle", "spotlighting",
+@pytest.mark.parametrize("defense", ["none", "tracklimits", "tracklimits_confirm_oracle", "spotlighting",
                                      "repeat_user_prompt"])
 def test_every_defense_sends_the_model_sorted_args(defense):
     llm = ScrambledLLM()
@@ -88,7 +88,7 @@ def test_children_get_a_fixed_hash_seed(monkeypatch):
     calls = []
     monkeypatch.setattr(run_batch.subprocess, "call", lambda cmd, **kw: calls.append(kw) or 0)
     monkeypatch.setattr(run_batch, "unload_models", lambda: None)
-    monkeypatch.setattr(sys, "argv", ["run_batch.py", "--suite", "workspace", "--defenses", "none", "mcp_guard"])
+    monkeypatch.setattr(sys, "argv", ["run_batch.py", "--suite", "workspace", "--defenses", "none", "tracklimits"])
     run_batch.main()
     assert len(calls) == 2
     assert all(kw["env"]["PYTHONHASHSEED"] == "0" for kw in calls)
@@ -98,10 +98,10 @@ def test_models_are_unloaded_before_every_defense(monkeypatch):
     events = []
     monkeypatch.setattr(run_batch.subprocess, "call", lambda cmd, **kw: events.append(cmd[cmd.index("--defense") + 1]) or 0)
     monkeypatch.setattr(run_batch, "unload_models", lambda: events.append("unload"))
-    monkeypatch.setattr(sys, "argv", ["run_batch.py", "--suite", "workspace", "--defenses", "none", "mcp_guard",
-                                      "mcp_guard_confirm_oracle"])
+    monkeypatch.setattr(sys, "argv", ["run_batch.py", "--suite", "workspace", "--defenses", "none", "tracklimits",
+                                      "tracklimits_confirm_oracle"])
     run_batch.main()
-    assert events == ["unload", "none", "unload", "mcp_guard", "unload", "mcp_guard_confirm_oracle"]
+    assert events == ["unload", "none", "unload", "tracklimits", "unload", "tracklimits_confirm_oracle"]
 
 
 def test_unload_models_asks_ollama_to_drop_every_loaded_model(monkeypatch):
