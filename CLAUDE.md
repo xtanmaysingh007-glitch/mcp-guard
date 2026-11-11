@@ -625,6 +625,13 @@ defense names stored in them (runs/ is git-ignored), and the defense names in th
 adapter, run_batch, run_agentdojo, replay of an old log, attribution label). GitHub repo renamed by Tanmay;
 origin -> https://github.com/xtanmaysingh007-glitch/tracklimits.git (the old URL redirects, so old Kaggle cells
 still clone). README / docs say "Formerly mcp-guard." and carry a note on the old defense names.
+Checks after the rename: full suite 257 passed / 4 skipped / 10 xfailed (main env, tracklimits not pip-installed
+there, so the 4 install tests skip); fresh venv `pip install -e ".[proxy,test]"` (no AgentDojo): clean install,
+`python -m tracklimits --help` and `init` work, proxy smoke (client -> `python -m tracklimits proxy` -> toy server):
+attacker send blocked, server ran only read_inbox, audit [allowed, blocked]; suite 87 passed / 22 skipped (all
+AgentDojo-only; the new tracklimits.exe was NOT blocked by Application Control this time, so the install tests
+ran). replay_guard.py on a frozen F7r log with defense "mcp_guard" == with "tracklimits"; attribution over the
+F7r folders gives the same 15/15, 16/16, 16 as before, labelled "mcp_guard (= tracklimits)".
 
 ## Kaggle recipe (free, runs without the laptop)
 Notebook with GPU T4 x2, Internet on, ONE cell: install zstd/pciutils, `curl ollama.com/install.sh | sh`,
