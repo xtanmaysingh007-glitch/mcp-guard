@@ -4,7 +4,7 @@
         [--audit-log audit.jsonl] [--confirm auto|terminal|none] [--prompt-timeout 120] \
         -- <command that starts the real MCP server> [its args...]
 
-The host (Claude Desktop, an IDE, ...) starts THIS command instead of the real server's.
+The host (a desktop AI app, an IDE, ...) starts THIS command instead of the real server's.
 """
 from __future__ import annotations
 

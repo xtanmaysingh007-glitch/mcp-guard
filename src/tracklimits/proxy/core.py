@@ -1,6 +1,6 @@
 """The proxy itself: an MCP server to the host, an MCP client to the real server behind it.
 
-    host (Claude Desktop, an IDE, an agent)  <-stdio->  GuardedProxy  <-stdio->  real MCP server
+    host (desktop AI app, IDE, agent)  <-stdio->  GuardedProxy  <-stdio->  real MCP server
 
 - tools/list is forwarded unchanged. Tool descriptions are the server's text: we pass them on, but they never
   go into the Guard, so whatever they claim ("this address is verified") can't change a decision.

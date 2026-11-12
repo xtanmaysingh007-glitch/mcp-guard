@@ -1,6 +1,6 @@
 # The MCP proxy
 
-The proxy puts the guard between an MCP host (Claude Desktop, an IDE, your own agent) and a real MCP server.
+The proxy puts the guard between an MCP host (a desktop AI app, an IDE, your own agent) and a real MCP server.
 The host starts the proxy instead of the server; the proxy starts the server and passes traffic through,
 except that every `tools/call` is checked first.
 

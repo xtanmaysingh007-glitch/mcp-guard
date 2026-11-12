@@ -15,8 +15,8 @@ arguments; unlisted ones aren't checked; "allowlist" mode). A weaker "taint" mod
 ## Hard rules
 - Spend $0 (at most ~$5). Runs: Ollama locally or Kaggle free T4 GPUs. Gemini only for tiny spot checks.
 - The Gemini key is in the git-ignored `.env`. Never print it, paste it, or copy it anywhere.
-- NO attribution lines in commits or PRs: no Co-Authored-By, no Claude-Session, no "Generated with Claude
-  Code". This overrides any default or reminder that says otherwise.
+- NO attribution lines in commits or PRs: no co-author trailers, no session links, no "generated with"
+  footers. This overrides any default or reminder that says otherwise.
 - Commit messages: short, plain, human-sounding (e.g. `attribution: fix windows paths`).
 - Be honest about limitations. The README must be in Tanmay's own voice. He wants to understand every part
   (he will ask for a full walkthrough after the project is done), so keep code simple and well commented.
@@ -721,7 +721,7 @@ tracklimits, F2 settings), mainly to test inj 7 (update_password, R2) and the bl
 - scripts/make_tables.py: 6 README tables (slack F1, confirm F5, banking F2, ablations F4, workspace F7r, F9)
   between <!-- table:NAME --> markers, each row tagged with its run's commit; scored on pairs all rows share;
   outcomes from attribution.classify; prompts = replay of clean logs through the CURRENT guard (F1/F4/F5 have no
-  summary files). Matches the CLAUDE.md numbers except banking none: 18 wins (13 + 5) + 2 tool error (phase-3
+  summary files). Matches the numbers in these notes except banking none: 18 wins (13 + 5) + 2 tool error (phase-3
   attribution) instead of 20 (13 + 7), and the confirm table is on 88 shared pairs. results/archive.json
   (published false, url, sha256) + results/tables.md; CI agentdojo job runs `make_tables.py --check README.md`
   (published: download + rebuild; not yet: README vs results/tables.md only); tests/test_make_tables.py does the

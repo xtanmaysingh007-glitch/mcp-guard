@@ -1,7 +1,7 @@
 # TrackLimits: review brief
 
 Provenance-based prompt injection defense for LLM agent tool calls. Formerly mcp-guard. Everything below comes
-from this repository (code, tests, `CLAUDE.md`, `docs/`); numbers come from logged runs. Defense names in results
+from this repository (code, tests, `docs/PROJECT_NOTES.md`, the rest of `docs/`); numbers come from logged runs. Defense names in results
 before 2026-11-11 are the old ones (`mcp_guard` = `tracklimits`, `mcp_guard_confirm_oracle` =
 `tracklimits_confirm_oracle`, ...).
 

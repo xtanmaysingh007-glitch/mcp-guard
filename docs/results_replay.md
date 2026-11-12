@@ -190,7 +190,7 @@ attacker value, so oracle utility is an upper bound for a real user).
 
 (The other rows, ablations and none-like defenses replayed as the guard, are the same old and fixed too.) These
 pool every frozen batch of a defense; since not a single call's ask changed and no call that ran in a solved log
-is newly refused, every batch on its own (F1, F5, F7r, F9, ...) keeps the numbers CLAUDE.md gives for it. The 4
+is newly refused, every batch on its own (F1, F5, F7r, F9, ...) keeps the numbers docs/PROJECT_NOTES.md gives for it. The 4
 extra blocks (3 banking, 1 travel) are the empty-recipient / empty-hotel calls above, in logs that failed anyway.
 
 ## Caveats

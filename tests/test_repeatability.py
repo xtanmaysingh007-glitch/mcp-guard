@@ -1,6 +1,6 @@
 """Runs must repeat: the same task under the same model should give the same transcript, under every defense.
 
-2026-11-10 investigation (CLAUDE.md, "Clean-run differences between defenses"): Qwen on Ollama at temperature 0
+2026-11-10 investigation (docs/PROJECT_NOTES.md, "Clean-run differences between defenses"): Qwen on Ollama at temperature 0
 was not repeatable, for reasons outside the guard that hit every defense alike:
   1. Ollama returns a tool call's arguments in a random key order (Go map iteration), and AgentDojo sends them
      back in the next prompt, so the model's input changed at random.            -> SortToolArgs

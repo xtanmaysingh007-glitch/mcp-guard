@@ -7,7 +7,7 @@ These tests replay a real logged run (tests/fixtures/ws_user_task_4_none.json, t
 executors, call by call, on fresh copies of the same environment, and compare the tool messages byte for byte
 (and with the logged ones). The guard here has an allow-everything policy: Policy() guards no argument and
 lets unknown tools run. (The user_task_4 difference turned out to come from Ollama, not the executor: see
-CLAUDE.md, "Clean-run differences between defenses".)
+docs/PROJECT_NOTES.md, "Clean-run differences between defenses".)
 """
 import json
 from pathlib import Path

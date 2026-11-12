@@ -1,6 +1,10 @@
 # secrets
 .env
 
+# local assistant files (the project notes are docs/PROJECT_NOTES.md)
+CLAUDE.md
+.claude/
+
 # local environments / caches
 .venv/
 __pycache__/
