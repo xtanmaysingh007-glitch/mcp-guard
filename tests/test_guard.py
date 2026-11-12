@@ -548,7 +548,9 @@ def test_call_scope_expired_approval_asks_again():
 def test_call_key_keeps_url_query():
     k = Guard.approval_key
     assert k("get_webpage", {"url": "www.x.com/a"}) != k("get_webpage", {"url": "www.x.com/a?to=evil@attacker.com"})
-    assert k("send_email", _mail("Hi  there")) == k("send_email", _mail("hi there"))   # spacing / case only
+    # exact strings since the review (R9): a change in case or spacing is another call; identical args, same key
+    assert k("send_email", _mail("Hi  there")) != k("send_email", _mail("hi there"))
+    assert k("send_email", _mail("Hi there")) == k("send_email", _mail("Hi there"))
 
 
 def test_approval_scope_setting_is_checked():

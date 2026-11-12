@@ -184,3 +184,8 @@ confirmable:
   - send_direct_message
   - send_channel_message
   - update_user_info   # the user's own profile (banking user_task_13: new address read from a file)
+
+# Secrets (review R2, 2026-11-12): a new password must be a token the user wrote in quotes, exactly. Before,
+# any word of the request counted ("please", "the bill"), and anything under 3 characters wasn't checked at all.
+secret_args:
+  update_password: [password]

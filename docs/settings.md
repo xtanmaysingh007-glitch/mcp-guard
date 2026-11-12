@@ -29,6 +29,7 @@ The proxy (`tracklimits proxy`) also overrides a few things on top of the file, 
 | `self_note_tools` | `send_email: [recipients, body]` | same (not in the file: default) | same (default) |
 | `self_note_copy_words` | `6` | `6` | `6` |
 | `self_note_min_digits` | `8` | `8` | `8` |
+| `secret_args` | none | `update_password: [password]` | none |
 
 ## What each one does, and why the default is what it is
 
@@ -107,12 +108,31 @@ yourself" used to pass (workspace injection tasks 9 and 12, seen live 12 times).
 defaults above (fail-safe); `0` switches that half off. It closes the observed variant only: a paraphrase
 without digits, or a number written in words, still passes (docs/adaptive_attacks.md, G).
 
+**`secret_args`** (tool -> arguments; review R2, 2026-11-12). Secrets such as a new password. Such a value
+must equal a token the user wrote in quotes in the request, exactly (`'1j1l-2k3j'`). Before, any word of the
+request counted ("please" passed as a password) and anything under three characters wasn't checked at all.
+Other values matched against the request need at least three characters and a word that isn't a stop word.
+
 ## Fixed in code (not in the policy file)
 
 - `PLAIN_BLOCK_RETRIES = 2` (guard.py): the same refused call gets the normal reason twice, then a blunt "already
   refused, don't retry" (small models looped on blocks; one workspace task hit 61).
 - `MAX_DECLINES = 2` (guard.py): after two declined prompts in a session the guard stops asking and blocks every
   untraceable value (an attacker can't wear the user down with prompts).
+
+## Size caps on tool output (review R8, 2026-11-12)
+
+Fixed in code (`provenance.py`), so hostile output can't stall the guard (40,000 characters of one token used
+to take about 16 s):
+
+- **Untrusted output** is scanned as whitespace tokens, each cut to `UNTRUSTED_TOKEN_CAP` = 2,048 characters.
+  A link hidden past that point in one giant token isn't seen there.
+- **Trusted output**: only the first `TRUSTED_MAX_LINES` = 2,000 lines and `TRUSTED_MAX_CHARS` = 200,000
+  characters become trusted values. Anything after the cap is recorded as untrusted, so it can't vouch for a
+  value (fail closed): a payee on line 2,001 of a trusted list has to come from somewhere else.
+
+Measured on the dev laptop: 1 MB of hostile output (long tokens, runs of spaces, 40,000 distinct emails or URLs)
+is recorded in 0.2 to 0.9 s, trusted or not.
 
 ## What the proxy changes on top of the file
 

@@ -7,8 +7,7 @@ import json
 from typing import Any, Callable
 
 from .policy import Policy
-from .provenance import (Provenance, call_canonical, canonical, canonical_value, extract_atoms, iter_strings,
-                         primary_atom)
+from .provenance import Provenance, canonical_value, extract_atoms, iter_strings, primary_atom
 
 # A plainly blocked call gets the normal "not traceable" reason this many times; any further identical
 # try gets "already refused, stop". (Confirm mode already stops after the user's first "no".)
@@ -97,8 +96,9 @@ class Guard:
 
     @staticmethod
     def approval_key(tool: str, args: dict[str, Any]) -> str:
-        """Call-scoped approval key: a hash of the tool name and ALL its arguments (canonical)."""
-        raw = tool + json.dumps(call_canonical(args), sort_keys=True, default=str)
+        """Call-scoped approval key: a hash of the tool name and ALL its arguments, exactly as given (no case
+        folding: a yes to "Pay ABC" is not a yes to "pay abc", review R9)."""
+        raw = tool + json.dumps(args, sort_keys=True, default=str)
         return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
     def approve_call(self, tool: str, args: dict[str, Any]) -> str:
@@ -131,6 +131,11 @@ class Guard:
                 atoms = [a for a in atoms if (tool, arg, a) not in self.approved]   # exact value, query included
                 if atoms:
                     bad[arg] = atoms
+        for arg in self.policy.secret_args.get(tool, []):
+            # R2: a secret (a new password) must be a token the user put in quotes, exactly; a word from the
+            # request ("please") or anything from a tool doesn't count
+            if arg in args and not (isinstance(args[arg], str) and args[arg] in self.prov.quoted):
+                bad[arg] = bad.get(arg, []) + ["secret not quoted in the user's request"]
         for arg, issues in self._self_note_issues(tool, args).items():
             bad[arg] = bad.get(arg, []) + issues
         return bad

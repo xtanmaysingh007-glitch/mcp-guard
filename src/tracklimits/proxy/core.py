@@ -116,5 +116,7 @@ class GuardedProxy:
                 raise                                  # the server's own protocol error, passed through
             # Record what came back (Guard.record_result: an error result is never trusted, even from a trusted
             # tool, and a trusted tool's echo of its own arguments doesn't count).
-            self.guard.record_result(tool, args, result_text(result), is_error=bool(result.is_error))
+            # (in a worker thread: a huge output must not stall the event loop, review R8)
+            await anyio.to_thread.run_sync(self.guard.record_result, tool, args, result_text(result),
+                                           bool(result.is_error))
             return result

@@ -47,6 +47,8 @@ class Policy:
     # digits that traces to neither the user nor a trusted tool (an attacker's "note to self" with a ransom IBAN).
     # tool -> [recipient arg, text arg, ...]. 0 switches that half off. Missing keys get these (safe) defaults.
     self_note_tools: dict[str, list[str]] = field(default_factory=lambda: dict(SELF_NOTE_TOOLS))
+    # tool -> arguments that are secrets (a new password): must equal a token the user quoted in the request
+    secret_args: dict[str, list[str]] = field(default_factory=dict)
     self_note_copy_words: int = 6
     self_note_min_digits: int = 8
     mode: str = "allowlist"  # allowlist: guarded args must trace to trusted data (default-deny)
@@ -93,6 +95,7 @@ class Policy:
             # missing or empty -> the safe defaults; an explicit 0 switches a check off
             self_note_tools=({k: list(v) for k, v in data["self_note_tools"].items()}
                              if data.get("self_note_tools") else dict(SELF_NOTE_TOOLS)),
+            secret_args={k: list(v) for k, v in (data.get("secret_args") or {}).items()},
             self_note_copy_words=_count(data.get("self_note_copy_words"), 6),
             self_note_min_digits=_count(data.get("self_note_min_digits"), 8),
         )
@@ -103,7 +106,7 @@ class Policy:
     def known_tools(self) -> set[str]:
         """Every tool the policy says something about. Anything else is "unknown"."""
         return (self.trusted_tools | self.safe_tools | self.confirmable | self.always_confirm
-                | set(self.forbid_tainted) | set(self.check_links_in) | set(self.outward_args))
+                | set(self.forbid_tainted) | set(self.check_links_in) | set(self.outward_args) | set(self.secret_args))
 
     def scope_for(self, tool: str) -> str:
         """approval_scope for this tool: its override, else the default."""
@@ -140,7 +143,7 @@ class Policy:
 # nobody has decided about yet (blocked under unknown_tools: block); the guard ignores it.
 LIST_KEYS = ("trusted_tools", "confirmable", "always_confirm", "user_identities", "weak_trusted_tools",
              "safe_tools", "unclassified")
-ARG_MAP_KEYS = ("forbid_tainted", "check_links_in", "outward_args", "self_note_tools")   # tool -> [argument]
+ARG_MAP_KEYS = ("forbid_tainted", "check_links_in", "outward_args", "self_note_tools", "secret_args")  # tool -> [arg]
 SCALAR_KEYS = ("strict_trust", "unknown_tools", "approval_scope", "mode")
 INT_KEYS = ("approval_ttl_calls", "self_note_copy_words", "self_note_min_digits")
 MAP_KEYS = ("approval_scope_by_tool",)                                                    # tool -> word

@@ -37,7 +37,9 @@ from urllib.parse import unquote, urlsplit
 
 import yaml
 
-_EMAIL = re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+")
+# A match may only START where a run of address characters starts (the lookbehind): the same matches as before,
+# but the engine no longer re-scans a long run from every position inside it (review R8: quadratic).
+_EMAIL = re.compile(r"(?<![\w.+-])[\w.+-]+@[\w-]+(?:\.[\w-]+)+")
 _URL = re.compile(r"(?:https?://|www\.)[^\s\"'<>)\]]+", re.IGNORECASE)
 # IBAN, optionally written in groups of 4 separated by single spaces
 _IBAN = re.compile(r"\b[A-Z]{2}\d{2}(?: ?[A-Z0-9]{4}){2,7}(?: ?[A-Z0-9]{1,4})?\b")
@@ -50,6 +52,37 @@ _TLDS = ("com|net|org|io|co|info|biz|xyz|app|dev|me|us|uk|de|fr|ru|cn|in|ai|site
          "click|tk|ws|cc|tv|eu|ca|au|nl|ch|es|it|pl|se|jp|br")
 _BARE = re.compile(r"(?<![\w@./-])((?:[a-z0-9-]+\.)+(?:" + _TLDS + r")(?![\w-])(?:/[^\s\"'<>)\]]*)?)",
                    re.IGNORECASE)
+_TLD_SET = frozenset(_TLDS.split("|"))
+# a run of host characters with at least one dot, starting with a label character (a domain can't start
+# with "."): one match per run, found by the regex engine, so plain words cost nothing in Python
+_HOST_RUN = re.compile(r"(?<![\w@./-])[a-z0-9-]+\.[a-z0-9.-]*", re.IGNORECASE)
+_PATH = re.compile(r"/[^\s\"'<>)\]]*")
+
+
+def _bare_domains(text: str) -> list[str]:
+    """The same matches as _BARE ("evil.com", "x.evil.io/login"), found in linear time (review R8: the regex
+    backtracked through every label of a long dotted token and tried all TLDs at each step). For each run of
+    host characters: the domain ends at the LAST label that is a known TLD, with only non-empty labels before
+    it; a path follows only if that TLD ends the run."""
+    out = []
+    for m in _HOST_RUN.finditer(text):
+        labels = m.group().split(".")
+        stop = labels.index("") if "" in labels else len(labels)      # an empty label ("a..b") ends the name
+        # the TLD may not run on into a word character or "-" ("evil.com_x" is no domain): inside the run the
+        # next character is a "."; for the last label it is the character after the run
+        after = text[m.end():m.end() + 1]
+        last_ok = not (after and (after.isalnum() or after in "_-"))
+        best = max((j for j in range(1, stop) if labels[j].lower() in _TLD_SET
+                    and (j < len(labels) - 1 or last_ok)), default=None)
+        if best is None:
+            continue
+        domain = ".".join(labels[:best + 1])
+        if best + 1 == len(labels):
+            path = _PATH.match(text, m.end())
+            domain += path.group() if path else ""
+        out.append(domain)
+    return out
+
 _WS = re.compile(r"\s+")
 _NAME_ADDR = re.compile(r"[\w .'-]{0,60}<\s*[^<>\s]+\s*>")
 
@@ -60,20 +93,34 @@ _DEFANG = [  # (pattern, replacement): undo common ways of writing a link so a f
     (re.compile(r"\s*[\[({]\s*(?:dot|\.)\s*[\])}]\s*", re.IGNORECASE), "."),
     (re.compile(r"\s*[\[({]\s*(?:at|@)\s*[\])}]\s*", re.IGNORECASE), "@"),
     # spelled out: "bob at evil dot com" (only as a whole address, so "I work at corp.com" is untouched)
-    (re.compile(r"\b([\w.+-]+)\s+at\s+([\w-]+(?:\s+dot\s+[\w-]+)+)\b", re.IGNORECASE),
+    (re.compile(r"(?<![\w.+-])([\w.+-]+)\s+at\s+([\w-]+(?:\s+dot\s+[\w-]+)+)\b", re.IGNORECASE),
      lambda m: m.group(1) + "@" + re.sub(r"\s+dot\s+", ".", m.group(2), flags=re.IGNORECASE)),
 ]
 _SPLIT_LINE = re.compile(r"(?<=\S)[ \t]*\n[ \t]*(?=\S)")   # a line break in the middle of a token
 _B64 = re.compile(r"[A-Za-z0-9+/]{16,}={0,2}")
+_B64_MAX = 4096                 # a hidden link is short; don't decode megabytes of "base64" (R8)
+_WS_RUN = re.compile(r"\s{2,}")
+
+
+def _squeeze(text: str) -> str:
+    """Runs of whitespace -> one character (a newline if the run had one). Atoms never contain a run of
+    whitespace, and patterns that start with a whitespace repeat no longer re-scan a 40,000-space run from every position (R8)."""
+    return _WS_RUN.sub(lambda m: "\n" if "\n" in m.group() else " ", text)
+
+
+_SCHEME_PREFIX = re.compile(r"^[a-z][a-z0-9+.-]*://", re.IGNORECASE)
+_HOST_SPLIT = re.compile(r"([^/?#]*)(.?)(.*)", re.DOTALL)
 
 
 def _clean_url(u: str) -> str:
-    """Compare links without scheme, "www." or trailing slash/punctuation: http://www.a.com/ == a.com.
-    (Path and query are kept: a trusted page does not make other pages of the site trusted.)"""
-    u = u.rstrip(".,;:!?").lower()
-    u = re.sub(r"^[a-z][a-z0-9+.-]*://", "", u)
-    u = u[4:] if u.startswith("www.") else u
-    return u.rstrip("/")
+    """Compare links without scheme, "www." or trailing slash/punctuation: http://www.a.com/ == a.com. Only the
+    host is lower-cased: path and query keep their case (pastebin.com/AbCd is not pastebin.com/abcd, review R9),
+    and they are kept, so a trusted page does not make other pages of the site trusted."""
+    u = u.rstrip(".,;:!?")
+    u = _SCHEME_PREFIX.sub("", u)
+    u = u[4:] if u[:4].lower() == "www." else u
+    host, sep, rest = _HOST_SPLIT.match(u).groups()
+    return (host.lower() + sep + rest).rstrip("/")
 
 
 # ---------------------------------------------------------------------------------- whole-value parsing
@@ -121,6 +168,11 @@ def _whole_url(s: str) -> str | None:
 def _whole_email(s: str) -> str | None:
     """s parsed whole as one email address ("bob@x.com" or "Bob <bob@x.com>"), lower-cased, or None.
     A quoted local part ('"bob@corp.com"@evil.com'), a second address or extra text is None."""
+    if len(s) > 320:                          # no address is that long (254 max); parseaddr is slow on megabytes
+        return None
+    if "<" not in s:                          # a bare address: no need for the (slow) full parser
+        addr = s.strip()
+        return addr.lower() if _ADDR.fullmatch(addr) and _valid_host(addr.rsplit("@", 1)[1]) else None
     name, addr = parseaddr(s)
     if not addr:
         return None
@@ -132,7 +184,7 @@ def _whole_email(s: str) -> str | None:
     return addr.lower()
 
 
-def whole_atom(s: str) -> tuple[str, str] | None:
+def whole_atom(s: str, check_embedded: bool = True) -> tuple[str, str] | None:
     """One guarded value, parsed whole: ("typed", email / URL / IBAN) or ("whole", plain value), or None when
     it does not parse as the kind it looks like (then it can't be traced, and the guard refuses it)."""
     s = s.strip()
@@ -156,7 +208,7 @@ def whole_atom(s: str) -> tuple[str, str] | None:
         if looks_like_host:                       # "evil.cloud", "203.0.113.7/login": a URL, not a name
             url = _whole_url(s)
             return ("typed", url) if url else None
-    if typed_atoms(s):
+    if check_embedded and typed_atoms(s):
         # a "name" with a link, email or IBAN inside it ("[www.evil.com](https://www.evil.com)") is not one
         # value: refuse it rather than trust it as a plain name (adaptive case B2a)
         return None
@@ -165,21 +217,24 @@ def whole_atom(s: str) -> tuple[str, str] | None:
 
 def _tokens_as_values(text: str) -> set[str]:
     """Typed values written as one whitespace token in free text ("evil.cloud", "203.0.113.7/x"), parsed with
-    the same whole-value parser, so a value the user typed matches the same value in an argument."""
+    the same whole-value parser, so a value the user typed matches the same value in an argument. Tokens that
+    can't be one (no "." "@" ":" and not IBAN-like, or longer than 2,048 chars) are skipped cheaply (R8)."""
     out = set()
-    for tok in text.split():
+    for tok in set(text.split()):            # each distinct token once
         tok = tok.strip(".,;:!?()[]{}<>\"'")
-        if tok:
-            r = whole_atom(tok)
-            if r and r[0] == "typed":
-                out.add(r[1])
+        if not tok or len(tok) > 2048 or not ("." in tok or "@" in tok or ":" in tok or tok[:2].isalpha()
+                                              and tok[2:4].isdigit()):
+            continue
+        r = whole_atom(tok, check_embedded=False)
+        if r and r[0] == "typed":
+            out.add(r[1])
     return out
 
 
 def _atoms_in(text: str) -> set[str]:
     out = {e.lower() for e in _EMAIL.findall(text)}
     out |= {_clean_url(u) for u in _URL.findall(text)}
-    out |= {_clean_url(u) for u in _BARE.findall(text)}
+    out |= {_clean_url(u) for u in _bare_domains(text)}
     out |= {i.replace(" ", "").lower() for i in _IBAN.findall(text)}
     for m in _IBAN_LOOSE.finditer(text):
         iban = re.sub(r"[ \-]", "", m.group()).lower()
@@ -201,6 +256,8 @@ def _base64_texts(text: str) -> list[str]:
     """Readable text hidden in base64 tokens (a URL to "decode and open")."""
     out = []
     for tok in _B64.findall(text):
+        if len(tok) > _B64_MAX:
+            continue
         try:
             decoded = base64.b64decode(tok + "=" * (-len(tok) % 4), validate=True).decode("utf-8")
         except (ValueError, UnicodeDecodeError):
@@ -210,23 +267,59 @@ def _base64_texts(text: str) -> list[str]:
     return out
 
 
+# Nothing in a text can become an email / URL / IBAN without one of these: "@" "." "/" "%" (encoding),
+# a digit, "dot" (spelled out), their full-width forms (NFKC turns them into ASCII), or a 16+ char base64 run.
+_MAYBE_ATOM = re.compile(r"[@./%\d．＠／。]|dot|[A-Za-z0-9+/]{16}", re.IGNORECASE)
+
+
+def _contains_any(a: str, found: set[str]) -> bool:
+    """Is any atom of `found` a substring of a? Indexed by 4-character prefixes, so it doesn't compare against
+    every atom (with tens of thousands of atoms that was quadratic, review R8)."""
+    short = [b for b in found if len(b) < 4]
+    if any(b in a for b in short):
+        return True
+    index: dict[str, list[str]] = {}
+    for b in found:
+        if len(b) >= 4:
+            index.setdefault(b[:4], []).append(b)
+    return any(b in a for k in range(len(a) - 3) for b in index.get(a[k:k + 4], ()))
+
+
 def typed_atoms(text: str) -> set[str]:
     """Emails, links and IBANs in a text, including disguised ones (see normalize). The design rule: a
     disguise can only ADD atoms that must be traceable, never hide or replace the raw ones."""
+    if not _MAYBE_ATOM.search(text):
+        return set()                          # fast path: plain words (most leaves of a trusted tool's output)
+    text = _squeeze(text)
     norm = normalize(text)
-    out = _atoms_in(text) | _atoms_in(norm)
+    out = _atoms_in(text) | (_atoms_in(norm) if norm != text else set())
     # A link broken over two lines ("evil." / "com/login"). Joining every line break would also glue a
     # link at the end of a line to the next word, so only atoms that are new (don't contain one found
     # without joining) count.
     joined = _SPLIT_LINE.sub("", norm)
     if joined != norm:
-        out |= {a for a in _atoms_in(joined) if not any(b in a for b in out)}
+        out |= {a for a in _atoms_in(joined) if a not in out and not _contains_any(a, out)}
     for hidden in _base64_texts(norm):
         out |= _atoms_in(normalize(hidden))
     return out
 
 
 _WORD = re.compile(r"[a-z0-9$']+")
+# Caps (review R8: hostile output could stall the guard). Instead of making every scan fast on any input:
+# - untrusted output is scanned as whitespace tokens, each cut to UNTRUSTED_TOKEN_CAP characters;
+# - only the first TRUSTED_MAX_LINES lines / TRUSTED_MAX_CHARS characters of a trusted tool's output become
+#   trusted values; the rest is recorded as untrusted, so it can't vouch for anything (fail closed).
+UNTRUSTED_TOKEN_CAP = 2048
+TRUSTED_MAX_CHARS = 200_000
+TRUSTED_MAX_LINES = 2000
+# R2: the request is free text, so not every word of it is a value the user gave. A plain value only counts as
+# user-given if it is at least MIN_REQUEST_MATCH characters and not made of stop words only ("please", "the bill"
+# is still a name match; secrets have their own, stricter rule: a quoted token, see Provenance.quoted).
+MIN_REQUEST_MATCH = 3
+STOP_WORDS = frozenset("""a an and any are as at be but by can could do does for from have i if in into is it its
+me my no not of on or our please so some than that the their them then there these this those to us was we
+were what when which who will with would you your yes ok okay hi hello thanks thank""".split())
+_QUOTED = re.compile(r"'([^'\n]+)'|\"([^\"\n]+)\"|\u201c([^\u201d\n]+)\u201d|\u2018([^\u2019\n]+)\u2019")
 
 
 def _flat(s: str) -> str:
@@ -320,8 +413,10 @@ class _Corpus:
     text: str = ""
     n: int = 0
 
+    parse_tokens: bool = False    # the user's request: also parse each token whole (see _tokens_as_values)
+
     def add(self, s: str) -> None:
-        self.typed |= typed_atoms(s) | _tokens_as_values(s)
+        self.typed |= typed_atoms(s) | (_tokens_as_values(s) if self.parse_tokens else set())
         self.text += "\n" + _flat(s)
         self.n += 1
 
@@ -333,12 +428,16 @@ class _Corpus:
         return re.search(r"(?<!\w)" + re.escape(atom) + r"(?!\w)", self.text) is not None
 
 
+_YAML_LOADER = getattr(yaml, "CSafeLoader", yaml.SafeLoader)   # the C parser when PyYAML has it (same results)
+
+
 def leaf_values(text: str) -> list[str]:
     """Split a tool output into whole values: YAML list items / mapping values, else lines.
     A line like 'Hotel Names: Le Marais Boutique' also yields 'Le Marais Boutique'."""
     try:
-        data = yaml.safe_load(text)
-    except yaml.YAMLError:
+        # huge outputs are split by line instead (pure-Python YAML on megabytes is slow, R8)
+        data = yaml.load(text, Loader=_YAML_LOADER) if len(text) <= 200_000 else text
+    except (yaml.YAMLError, RecursionError):
         data = text
     if not isinstance(data, (dict, list, tuple)):
         data = str(text)
@@ -366,7 +465,7 @@ class _Values:
         for leaf in leaf_values(text):
             flat = _flat(leaf)
             found = typed_atoms(leaf)
-            parsed = whole_atom(leaf)
+            parsed = whole_atom(leaf, check_embedded=False) if len(leaf) <= 2048 else None
             if (("whole", flat) in distrust or any(("typed", a) in distrust for a in found)
                     or (parsed and parsed in distrust)):
                 continue
@@ -388,21 +487,34 @@ class _Values:
 
 @dataclass
 class Provenance:
-    user: _Corpus = field(default_factory=_Corpus)
+    user: _Corpus = field(default_factory=lambda: _Corpus(parse_tokens=True))
     tool_values: _Values = field(default_factory=_Values)   # strong trusted tools
     weak_values: _Values = field(default_factory=_Values)   # weak trusted tools (data an attacker can write)
     untrusted: _Corpus = field(default_factory=_Corpus)
     written: set[tuple[str, str]] = field(default_factory=set)  # (kind, atom) the agent wrote, untraceable
+    quoted: set[str] = field(default_factory=set)   # tokens the user put in quotes (exact): the only secrets
 
     def add_user(self, text: str) -> None:
         self.user.add(text)
+        self.quoted |= {next(g for g in m.groups() if g) for m in _QUOTED.finditer(text)}
+
+    def _from_user(self, kind: str, atom: str) -> bool:
+        """The user's request vouches for this value (R2: plain values need MIN_REQUEST_MATCH chars and a word
+        that isn't a stop word)."""
+        if kind == "whole" and (len(atom) < MIN_REQUEST_MATCH or set(atom.split()) <= STOP_WORDS):
+            return False
+        return self.user.contains(kind, atom)
 
     def add_trusted(self, text: str, weak: bool = False, also_distrust: set[tuple[str, str]] = frozenset()) -> None:
         """Output of a trusted tool: only its whole values become trusted (minus what the agent wrote, and minus
         also_distrust: the call's own untraceable arguments, which the tool may simply have echoed back).
         weak=True: a tool whose data an attacker can write (contacts built from emails, channel names);
         its values are kept apart so strict mode can refuse them for outward arguments."""
-        (self.weak_values if weak else self.tool_values).add(text, self.written | set(also_distrust))
+        lines = text.splitlines(keepends=True)
+        head = "".join(lines[:TRUSTED_MAX_LINES])[:TRUSTED_MAX_CHARS]
+        if len(head) < len(text):                 # past the cap: recorded, but not trusted (fail closed)
+            self.add_untrusted(text[len(head):])
+        (self.weak_values if weak else self.tool_values).add(head, self.written | set(also_distrust))
 
     def own_untraceable(self, value: Any) -> set[tuple[str, str]]:
         """The untraceable atoms of an argument value, also line by line and after "key: " (an echo may split
@@ -425,18 +537,19 @@ class Provenance:
         self.written |= self.own_untraceable(value)
 
     def add_untrusted(self, text: str) -> None:
-        self.untrusted.add(text)
+        """Untrusted output, scanned as whitespace tokens of at most UNTRUSTED_TOKEN_CAP characters each."""
+        self.untrusted.add(" ".join(tok[:UNTRUSTED_TOKEN_CAP] for tok in text.split()))
 
     def is_trusted(self, kind: str, atom: str, no_weak: Collection[str] = ()) -> bool:
         """no_weak: atom kinds ("typed", "whole") for which a value only a weak trusted tool returned doesn't
         count (strict_trust, outward argument)."""
-        return (self.user.contains(kind, atom) or self.tool_values.contains(kind, atom)
+        return (self._from_user(kind, atom) or self.tool_values.contains(kind, atom)
                 or (kind not in no_weak and self.weak_values.contains(kind, atom)))
 
     def source_of(self, kind: str, atom: str) -> str:
         """Where a value came from, for audit logs (read-only, decides nothing): the first that applies of
         "user request", "trusted tool", "weak trusted tool", "untrusted tool output", "nowhere"."""
-        if self.user.contains(kind, atom):
+        if self._from_user(kind, atom):
             return "user request"
         if self.tool_values.contains(kind, atom):
             return "trusted tool"
