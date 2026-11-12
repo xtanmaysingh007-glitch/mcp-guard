@@ -11,7 +11,7 @@
       "runs": "F1 F2 F4 F5 F7r F9"
     },
     {
-      "published": false,
+      "published": true,
       "release_tag": "logs-v2",
       "asset": "tracklimits-frozen-logs-v2.tar.gz",
       "url": "https://github.com/xtanmaysingh007-glitch/tracklimits/releases/download/logs-v2/tracklimits-frozen-logs-v2.tar.gz",
