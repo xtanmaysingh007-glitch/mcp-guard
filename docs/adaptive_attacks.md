@@ -392,14 +392,14 @@ Status after each phase (updated as fixes land):
 | id | phase 2 (P0) | phase 3 (P1) |
 |---|---|---|
 | R1 | fixed: every non-empty guarded value is checked | |
-| R2 | open | |
+| R2 | open | fixed: `secret_args` (a password must be a quoted token); request matches need 3+ chars and a non-stop-word |
 | R3 | fixed: guarded values parsed whole (urllib.parse, address parser), userinfo / quoted local parts refused | |
 | R4 | URL arguments fixed (an IP, `.zip` or `.cloud` value is a URL, so weak names don't fill it); free-text links still open | |
 | R5 | fixed: `Guard.record_result` (errors untrusted, own arguments not vouched for) on every path | |
 | R6 | fixed: strict loader, names checked against the tools; agentdojo.yaml repaired | |
 | R7 | fixed: argument names JSON-quoted | |
-| R8 | open | |
-| R9 | query string fixed (approvals keyed on the exact value); case folding open | |
+| R8 | open | fixed by caps: untrusted scanned per token (2,048 chars), trusted values only from the first 2,000 lines / 200,000 chars |
+| R9 | query string fixed (approvals keyed on the exact value); case folding open | fixed: URLs lower-case scheme and host only; call key on exact strings |
 
 ## What is still open, and why
 

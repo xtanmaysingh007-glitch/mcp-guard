@@ -663,6 +663,15 @@ query part). Docs corrected: no claim of one-time / expiring approvals remains (
 Tests: R1, R3, R4 (URL args), R5 x2, R6 x6, R7, R9-query unmarked and passing; still strict xfail: R2 x2, R4 free
 text x4, R8, R9 case x2. Suite 274 passed / 3 skipped / 19 xfailed.
 
+Phase 3 (P1) DONE (commit 96477a7): R2 secret_args (agentdojo.yaml: update_password.password must equal a token
+QUOTED in the request) + request matches need >= 3 chars and not only stop words; R9 _clean_url lower-cases scheme
+and host only, approval_key on exact args; R8 by CAPS (Tanmay's call: untrusted scanned as whitespace tokens of
+<= 2,048 chars; trusted values only from the first 2,000 lines / 200,000 chars, the rest recorded untrusted =
+fail closed; docs/settings.md) plus linear rewrites done before that call; attribution.py: "tool error" outcome,
+TRACE_SCORED {slack inj5} instead of the blanket override, banking new_password canary, disagreement list.
+Suite 286 passed / 3 skipped / 14 xfailed (10 old gaps + R4 free text x4). STATUS FILE: docs/WIP_review_fixes.md
+(order, decisions, what's left). Next: phase 4 replay of all frozen logs.
+
 ## Kaggle recipe (free, runs without the laptop)
 Notebook with GPU T4 x2, Internet on, ONE cell: install zstd/pciutils, `curl ollama.com/install.sh | sh`,
 start server with `subprocess.Popen("nohup ollama serve > /kaggle/working/ollama.log 2>&1 &", shell=True,
