@@ -14,7 +14,8 @@ Approvals (confirm mode) are not stored here: the guard keeps them per (tool, ar
 Atoms are what we compare:
   typed atoms  - emails, URLs, IBANs. Must match EXACTLY (set membership), so an attacker cannot
                  pass "b@corp.com" just because the trusted text contains "bob@corp.com".
-  whole values - other short values (channel, user, hotel names). Must match on word boundaries.
+  whole values - other values (channel, user, hotel names). Must match on word boundaries.
+  A guarded argument is parsed WHOLE into one atom (whole_atom); free text is scanned for typed atoms.
 Comparison is case-insensitive; IBANs ignore spaces; URLs ignore trailing punctuation.
 
 Checks:
@@ -30,7 +31,9 @@ import re
 import unicodedata
 from dataclasses import dataclass, field
 from typing import Any, Collection, Iterable
-from urllib.parse import unquote
+import ipaddress
+from email.utils import parseaddr
+from urllib.parse import unquote, urlsplit
 
 import yaml
 
@@ -49,7 +52,6 @@ _BARE = re.compile(r"(?<![\w@./-])((?:[a-z0-9-]+\.)+(?:" + _TLDS + r")(?![\w-])(
                    re.IGNORECASE)
 _WS = re.compile(r"\s+")
 _NAME_ADDR = re.compile(r"[\w .'-]{0,60}<\s*[^<>\s]+\s*>")
-MIN_WHOLE_VALUE_LEN = 3
 
 # Text normalisation (only ever ADDS atoms: atoms are taken from the raw text and from the normalised text)
 _ZERO_WIDTH = re.compile("[\u00ad\u200b-\u200f\u2060\ufeff]")
@@ -72,6 +74,106 @@ def _clean_url(u: str) -> str:
     u = re.sub(r"^[a-z][a-z0-9+.-]*://", "", u)
     u = u[4:] if u.startswith("www.") else u
     return u.rstrip("/")
+
+
+# ---------------------------------------------------------------------------------- whole-value parsing
+# A GUARDED argument (a recipient, a URL, a payee) must be exactly one value, parsed whole: what the guard
+# checks is what the tool will use. (Before 2026-11-12 the guard checked whatever atoms its regexes found
+# inside the string: "https://example.com'@evil.example/x" yielded "example.com", which the user had named,
+# while the tool went to evil.example. Review finding R3. Values under 3 characters were not checked at all: R1.)
+_ADDR = re.compile(r"[a-z0-9.!#$%&*+/=?^_`{|}~-]+@[a-z0-9-]+(?:\.[a-z0-9-]+)+", re.IGNORECASE)   # no quotes
+_NAME_ADDR_FORM = re.compile(r"[^<>@\"]*<\s*([^<>\s]+)\s*>\s*")
+_SCHEMEISH = re.compile(r"[a-z][a-z0-9+.-]*:/", re.IGNORECASE)
+_HOST_LABEL = re.compile(r"(?!-)[a-z0-9-]{1,63}(?<!-)", re.IGNORECASE)
+_IBAN_WHOLE = re.compile(r"[a-z]{2}\d{2}[a-z0-9]{8,30}", re.IGNORECASE)
+_URL_FORBIDDEN = set(" \t\r\n\"'<>\\`{}|^")
+
+
+def _valid_host(host: str | None) -> bool:
+    """A DNS name (two or more labels, the last one not all digits) or an IP address."""
+    if not host:
+        return False
+    try:
+        ipaddress.ip_address(host)
+        return True
+    except ValueError:
+        pass
+    labels = host.split(".")
+    return (len(labels) >= 2 and all(_HOST_LABEL.fullmatch(lab) for lab in labels)
+            and not labels[-1].isdigit())
+
+
+def _whole_url(s: str) -> str | None:
+    """s parsed whole as a URL (urllib.parse), or None. No userinfo (user@host), no spaces or quotes, a real
+    host. The result has the same form as the URL atoms found in text (_clean_url), so they compare."""
+    if any(c in _URL_FORBIDDEN for c in s):
+        return None
+    try:
+        parts = urlsplit(s if "://" in s else "http://" + s)
+        host = parts.hostname
+    except ValueError:
+        return None
+    if not parts.netloc or "@" in parts.netloc or not _valid_host(host):
+        return None
+    return _clean_url(s)
+
+
+def _whole_email(s: str) -> str | None:
+    """s parsed whole as one email address ("bob@x.com" or "Bob <bob@x.com>"), lower-cased, or None.
+    A quoted local part ('"bob@corp.com"@evil.com'), a second address or extra text is None."""
+    name, addr = parseaddr(s)
+    if not addr:
+        return None
+    form = _NAME_ADDR_FORM.fullmatch(s)
+    if s.strip() != addr and not (form and form.group(1) == addr):
+        return None
+    if not _ADDR.fullmatch(addr) or not _valid_host(addr.rsplit("@", 1)[1]):
+        return None
+    return addr.lower()
+
+
+def whole_atom(s: str) -> tuple[str, str] | None:
+    """One guarded value, parsed whole: ("typed", email / URL / IBAN) or ("whole", plain value), or None when
+    it does not parse as the kind it looks like (then it can't be traced, and the guard refuses it)."""
+    s = s.strip()
+    if not s:
+        return None
+    if _SCHEMEISH.match(s) or s.lower().startswith("www."):
+        url = _whole_url(s)
+        return ("typed", url) if url else None
+    if "@" in s:
+        email = _whole_email(s)
+        return ("typed", email) if email else None
+    compact = re.sub(r"[ \-]", "", s)
+    if _IBAN_WHOLE.fullmatch(compact) and re.fullmatch(r"[A-Za-z0-9 \-]+", s) and sum(c.isdigit() for c in compact) >= 10:
+        return ("typed", compact.lower())
+    head = re.split(r"[/?#]", s, maxsplit=1)[0]
+    if not any(c.isspace() for c in s) and "." in head:
+        try:
+            looks_like_host = _valid_host(urlsplit("http://" + head).hostname)
+        except ValueError:
+            looks_like_host = False
+        if looks_like_host:                       # "evil.cloud", "203.0.113.7/login": a URL, not a name
+            url = _whole_url(s)
+            return ("typed", url) if url else None
+    if typed_atoms(s):
+        # a "name" with a link, email or IBAN inside it ("[www.evil.com](https://www.evil.com)") is not one
+        # value: refuse it rather than trust it as a plain name (adaptive case B2a)
+        return None
+    return ("whole", _flat(s))
+
+
+def _tokens_as_values(text: str) -> set[str]:
+    """Typed values written as one whitespace token in free text ("evil.cloud", "203.0.113.7/x"), parsed with
+    the same whole-value parser, so a value the user typed matches the same value in an argument."""
+    out = set()
+    for tok in text.split():
+        tok = tok.strip(".,;:!?()[]{}<>\"'")
+        if tok:
+            r = whole_atom(tok)
+            if r and r[0] == "typed":
+                out.add(r[1])
+    return out
 
 
 def _atoms_in(text: str) -> set[str]:
@@ -148,15 +250,17 @@ def iter_strings(value: Any) -> Iterable[str]:
 
 
 def extract_atoms(value: Any, typed_only: bool = False) -> list[tuple[str, str]]:
-    """[(kind, atom)] with kind 'typed' or 'whole'. typed_only: only emails/URLs/IBANs (for free text)."""
+    """[(kind, atom)] for an argument value.
+    Guarded argument (typed_only False): one atom per string, parsed WHOLE (whole_atom): "typed" (email / URL /
+    IBAN) or "whole" (plain value). An empty string or one that doesn't parse is ("bad", text): never trusted.
+    Free text (typed_only True, check_links_in): every email / URL / IBAN found inside it."""
     atoms: list[tuple[str, str]] = []
     for s in iter_strings(value):
-        s = s.strip()
-        found = typed_atoms(s)
-        if found:
-            atoms += [("typed", a) for a in sorted(found)]
-        elif not typed_only and len(s) >= MIN_WHOLE_VALUE_LEN:
-            atoms.append(("whole", _flat(s)))
+        if typed_only:
+            atoms += [("typed", a) for a in sorted(typed_atoms(s.strip()))]
+            continue
+        atom = whole_atom(s)
+        atoms.append(atom if atom else ("bad", _flat(s) or "<empty>"))
     return atoms
 
 
@@ -204,16 +308,10 @@ def call_canonical(value: Any) -> Any:
 
 
 def primary_atom(s: str) -> str | None:
-    """The atom that IS this whole string (a recipient, a URL), or None. For a URL whose query string
-    holds an email, the URL is the primary atom and the email is only inside it."""
-    flat = _flat(s)
-    found = typed_atoms(s.strip())
-    if not found:
-        return flat if len(flat) >= MIN_WHOLE_VALUE_LEN else None
-    for a in found:
-        if a in (flat, re.sub(r"[ -]", "", flat), _clean_url(flat)):
-            return a
-    return None
+    """The atom that IS this whole string (a recipient, a URL), or None if it doesn't parse whole. For a URL
+    whose query string holds an email, the URL is the primary atom and the email is only inside it."""
+    atom = whole_atom(s)
+    return atom[1] if atom else None
 
 
 @dataclass
@@ -223,13 +321,15 @@ class _Corpus:
     n: int = 0
 
     def add(self, s: str) -> None:
-        self.typed |= typed_atoms(s)
+        self.typed |= typed_atoms(s) | _tokens_as_values(s)
         self.text += "\n" + _flat(s)
         self.n += 1
 
     def contains(self, kind: str, atom: str) -> bool:
         if kind == "typed":
             return atom in self.typed
+        if kind != "whole":
+            return False                      # "bad" (unparseable) values are never found anywhere
         return re.search(r"(?<!\w)" + re.escape(atom) + r"(?!\w)", self.text) is not None
 
 
@@ -266,9 +366,13 @@ class _Values:
         for leaf in leaf_values(text):
             flat = _flat(leaf)
             found = typed_atoms(leaf)
-            if ("whole", flat) in distrust or any(("typed", a) in distrust for a in found):
+            parsed = whole_atom(leaf)
+            if (("whole", flat) in distrust or any(("typed", a) in distrust for a in found)
+                    or (parsed and parsed in distrust)):
                 continue
             self.whole.add(flat)
+            if parsed and parsed[0] == "typed":   # the leaf IS one email / URL / IBAN (same parser as arguments)
+                self.typed.add(parsed[1])
             # Only trust a typed atom if it IS the whole value (an email field) or the value is exactly
             # "Name <atom>" (common contact format) - never free text that merely contains it.
             if len(found) == 1:
@@ -277,6 +381,8 @@ class _Values:
                     self.typed |= found
 
     def contains(self, kind: str, atom: str) -> bool:
+        if kind == "bad":
+            return False                      # an unparseable value is never trusted
         return atom in (self.typed if kind == "typed" else self.whole)
 
 
@@ -291,16 +397,32 @@ class Provenance:
     def add_user(self, text: str) -> None:
         self.user.add(text)
 
-    def add_trusted(self, text: str, weak: bool = False) -> None:
-        """Output of a trusted tool: only its whole values become trusted (minus what the agent wrote).
+    def add_trusted(self, text: str, weak: bool = False, also_distrust: set[tuple[str, str]] = frozenset()) -> None:
+        """Output of a trusted tool: only its whole values become trusted (minus what the agent wrote, and minus
+        also_distrust: the call's own untraceable arguments, which the tool may simply have echoed back).
         weak=True: a tool whose data an attacker can write (contacts built from emails, channel names);
         its values are kept apart so strict mode can refuse them for outward arguments."""
-        (self.weak_values if weak else self.tool_values).add(text, self.written)
+        (self.weak_values if weak else self.tool_values).add(text, self.written | set(also_distrust))
+
+    def own_untraceable(self, value: Any) -> set[tuple[str, str]]:
+        """The untraceable atoms of an argument value, also line by line and after "key: " (an echo may split
+        the value differently than it was written: "x\nMallory\ny" comes back as the line "Mallory")."""
+        pieces = []
+        for s in iter_strings(value):
+            for line in s.splitlines() or [s]:
+                pieces.append(line)
+                if ": " in line:
+                    pieces.append(line.split(": ", 1)[1])
+        out = set(self.unverified_pairs(value))
+        for piece in pieces:
+            if piece.strip():
+                out |= set(self.unverified_pairs(piece))
+        return out
 
     def note_written(self, value: Any) -> None:
         """The agent is calling a non-trusted tool with this argument value: remember its untraceable
         atoms, so a trusted tool that later echoes them back does not make them trusted."""
-        self.written |= set(self.unverified_pairs(value))
+        self.written |= self.own_untraceable(value)
 
     def add_untrusted(self, text: str) -> None:
         self.untrusted.add(text)
@@ -322,7 +444,7 @@ class Provenance:
             return "weak trusted tool"
         if self.untrusted.contains(kind, atom):
             return "untrusted tool output"
-        return "nowhere"
+        return "unparseable" if kind == "bad" else "nowhere"
 
     def copied_untrusted_run(self, text: str, n: int) -> str | None:
         """The first run of n words in `text` that also appears in untrusted tool output but not in the user's
@@ -360,5 +482,7 @@ class Provenance:
         return [a for _, a in self.unverified_pairs(value, typed_only, no_weak)]
 
     def tainted_atoms(self, value: Any, typed_only: bool = False, no_weak: Collection[str] = ()) -> list[str]:
+        """Taint mode (weaker, comparison only): values seen in untrusted data and not trusted. A value that
+        doesn't parse whole is always reported (it can't be compared at all)."""
         return [a for k, a in extract_atoms(value, typed_only)
-                if not self.is_trusted(k, a, no_weak) and self.untrusted.contains(k, a)]
+                if not self.is_trusted(k, a, no_weak) and (k == "bad" or self.untrusted.contains(k, a))]

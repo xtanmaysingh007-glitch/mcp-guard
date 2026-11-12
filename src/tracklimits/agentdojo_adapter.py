@@ -147,7 +147,8 @@ class GuardedToolsExecutor(ToolsExecutor):
 
             out, error = runtime.run_function(env, call.function, call.args)
             text = self.output_formatter(out)
-            self.guard.observe_output(call.function, text if error is None else f"{text}\n{error}")
+            self.guard.record_result(call.function, dict(call.args), text if error is None else f"{text}\n{error}",
+                                     is_error=error is not None)
             results.append(result(text, error))
         return query, runtime, env, [*messages, *results], extra_args
 
@@ -231,10 +232,27 @@ def resolve_defense(name: str) -> str:
     raise ValueError(f"unknown defense {name!r}; one of {DEFENSES} (or an old mcp_guard... name)")
 
 
+_SUITE_TOOL_ARGS: dict[str, set[str]] | None = None
+
+
+def agentdojo_tool_args() -> dict[str, set[str]]:
+    """tool -> its argument names, over the four AgentDojo v1.2.2 suites (to check the policy's names)."""
+    global _SUITE_TOOL_ARGS
+    if _SUITE_TOOL_ARGS is None:
+        from agentdojo.task_suite.load_suites import get_suite
+        out: dict[str, set[str]] = {}
+        for name in ("workspace", "slack", "banking", "travel"):
+            for f in get_suite("v1.2.2", name).tools:
+                out.setdefault(f.name, set()).update(f.parameters.model_fields)
+        _SUITE_TOOL_ARGS = out
+    return _SUITE_TOOL_ARGS
+
+
 def policy_for(defense: str, policy_path=DEFAULT_POLICY_PATH) -> Policy:
-    """The policy a guard defense uses: the YAML policy, changed for taint mode or an ablation."""
+    """The policy a guard defense uses: the YAML policy (checked against the suites' real tools and arguments),
+    changed for taint mode or an ablation."""
     defense = resolve_defense(defense)
-    policy = Policy.from_yaml(policy_path)
+    policy = Policy.from_yaml(policy_path, tool_args=agentdojo_tool_args())
     if defense == "tracklimits_taint":
         policy = policy.with_mode("taint")
     if defense in ABLATIONS:

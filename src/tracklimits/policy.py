@@ -66,8 +66,14 @@ class Policy:
             raise ValueError(f"weak_trusted_tools must be trusted tools: {self.weak_trusted_tools - self.trusted_tools}")
 
     @classmethod
-    def from_yaml(cls, path: str | Path) -> "Policy":
-        data = yaml.safe_load(Path(path).read_text()) or {}
+    def from_yaml(cls, path: str | Path, tool_args: dict[str, set[str]] | None = None) -> "Policy":
+        """Load a policy file, strictly: a file that loads but guards less than it says is worse than an error
+        (review R6: a scalar where a list belongs used to load as a list of letters, guarding nothing).
+        Errors: an empty file, unknown or duplicate keys, wrong shapes. tool_args (tool -> its argument names),
+        when given, also catches misspelled tools and arguments."""
+        data = _load_strict(Path(path).read_text(encoding="utf-8"), str(path))
+        if tool_args is not None:
+            _check_names(data, tool_args, str(path))
         return cls(
             trusted_tools=set(data.get("trusted_tools", [])),
             forbid_tainted={k: list(v) for k, v in (data.get("forbid_tainted") or {}).items()},
@@ -127,6 +133,80 @@ class Policy:
     def without_link_checks(self) -> "Policy":
         """Ablation: do not scan free-text args for links/emails/IBANs."""
         return replace(self, check_links_in={})
+
+
+# ---------------------------------------------------------------------------------------- strict loading
+# The keys a policy file may have, and their shape. "unclassified" is what `tracklimits init` writes for tools
+# nobody has decided about yet (blocked under unknown_tools: block); the guard ignores it.
+LIST_KEYS = ("trusted_tools", "confirmable", "always_confirm", "user_identities", "weak_trusted_tools",
+             "safe_tools", "unclassified")
+ARG_MAP_KEYS = ("forbid_tainted", "check_links_in", "outward_args", "self_note_tools")   # tool -> [argument]
+SCALAR_KEYS = ("strict_trust", "unknown_tools", "approval_scope", "mode")
+INT_KEYS = ("approval_ttl_calls", "self_note_copy_words", "self_note_min_digits")
+MAP_KEYS = ("approval_scope_by_tool",)                                                    # tool -> word
+KNOWN_KEYS = set(LIST_KEYS + ARG_MAP_KEYS + SCALAR_KEYS + INT_KEYS + MAP_KEYS)
+
+
+class _NoDuplicates(yaml.SafeLoader):
+    """A YAML loader that refuses a key written twice (PyYAML silently keeps the last one)."""
+
+
+def _mapping_no_duplicates(loader, node, deep=False):
+    seen = set()
+    for key_node, _ in node.value:
+        key = loader.construct_object(key_node, deep=deep)
+        if key in seen:
+            raise ValueError(f"duplicate key {key!r} (line {key_node.start_mark.line + 1})")
+        seen.add(key)
+    return yaml.SafeLoader.construct_mapping(loader, node, deep)
+
+
+_NoDuplicates.add_constructor(yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG, _mapping_no_duplicates)
+
+
+def _load_strict(text: str, where: str) -> dict:
+    data = yaml.load(text, Loader=_NoDuplicates)
+    if not isinstance(data, dict) or not data:
+        raise ValueError(f"{where}: a policy must be a non-empty mapping of settings")
+    unknown = set(data) - KNOWN_KEYS
+    if unknown:
+        raise ValueError(f"{where}: unknown key(s) {sorted(unknown)}; known: {sorted(KNOWN_KEYS)}")
+    for key, value in data.items():
+        if value is None:
+            continue                                   # "key:" with nothing after it = empty / the default
+        if key in LIST_KEYS and not (isinstance(value, list) and all(isinstance(v, str) for v in value)):
+            raise ValueError(f"{where}: {key} must be a list of names, got {value!r}")
+        if key in ARG_MAP_KEYS:
+            if not isinstance(value, dict) or not all(
+                    isinstance(k, str) and isinstance(v, list) and all(isinstance(a, str) for a in v)
+                    for k, v in value.items()):
+                raise ValueError(f"{where}: {key} must map each tool to a LIST of argument names "
+                                 f"(e.g. send_money: [recipient]), got {value!r}")
+        if key in MAP_KEYS and not (isinstance(value, dict) and all(isinstance(v, str) for v in value.values())):
+            raise ValueError(f"{where}: {key} must map tools to a word, got {value!r}")
+        if key in INT_KEYS and (isinstance(value, bool) or not isinstance(value, int)):
+            raise ValueError(f"{where}: {key} must be a whole number, got {value!r}")
+        if key in SCALAR_KEYS and not isinstance(value, (str, bool)):
+            raise ValueError(f"{where}: {key} must be a single word, got {value!r}")
+    return data
+
+
+def _check_names(data: dict, tool_args: dict[str, set[str]], where: str) -> None:
+    """Every tool the policy names exists, and every argument it names exists on that tool."""
+    for key in LIST_KEYS + MAP_KEYS:
+        if key == "user_identities":
+            continue
+        for tool in (data.get(key) or []):
+            if tool not in tool_args:
+                raise ValueError(f"{where}: {key} names unknown tool {tool!r}")
+    for key in ARG_MAP_KEYS:
+        for tool, args in (data.get(key) or {}).items():
+            if tool not in tool_args:
+                raise ValueError(f"{where}: {key} names unknown tool {tool!r}")
+            missing = set(args) - set(tool_args[tool])
+            if missing:
+                raise ValueError(f"{where}: {key}.{tool} names argument(s) {sorted(missing)} that {tool} doesn't "
+                                 f"have; it has {sorted(tool_args[tool])}")
 
 
 def _count(value, default: int) -> int:

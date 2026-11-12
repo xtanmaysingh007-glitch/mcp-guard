@@ -55,7 +55,8 @@ def replay(suite, guard, prompt: str, tasks: list, env):
             out, err = runtime.run_function(env, call.function, args)
             executed.append(call)
             if guard:
-                guard.observe_output(call.function, tool_result_to_str(out) if err is None else str(err))
+                guard.record_result(call.function, args, tool_result_to_str(out) if err is None else f"{out}\n{err}",
+                                    is_error=err is not None)
     return blocked, pre_env, executed
 
 

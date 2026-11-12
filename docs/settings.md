@@ -87,14 +87,16 @@ Unknown tools are blocked even in confirm mode (not asked).
 is still untrusted. `create_file` / `append_to_file` are left out of the AgentDojo list on purpose: they write.
 
 **`approval_scope`** (`value` / `call`) and **`approval_scope_by_tool`**. What a "yes" in confirm mode covers.
-`value`: that value in that argument, for the rest of the session. `call`: only that exact call, once. Default
+`value`: that value in that argument, for the rest of the session. `call`: only that exact call (since P2 the
+identical call is not asked again this session either way, so neither scope is one-time). Default
 `value` (fewer prompts), with `call` for tools whose free text the user should see every time: a yes to
 "email Carol draft 1" is not a yes to "email Carol draft 2". Measured on the slack logs: per-tool call scope
 roughly doubled the prompts; the de-duplication P2 (an exact call approved once isn't asked again) brought
 clean slack from 2.38 to 1.43 prompts per task.
 
 **`approval_ttl_calls`** (`5`). An approval given *ahead* of a call (`Guard.approve_call`, for asynchronous
-approval) expires after this many checked calls, and is used at most once.
+approval) expires after this many checked calls, and is used at most once. Nothing calls `approve_call` except
+tests: neither the AgentDojo harness nor the proxy uses it.
 
 **`self_note_tools`, `self_note_copy_words`, `self_note_min_digits`** (message to self, 2026-11-11). For the
 listed tools (`tool: [recipient arg, text arg, ...]`), when *every* recipient is one of `user_identities`, the
@@ -115,6 +117,8 @@ without digits, or a number written in words, still passes (docs/adaptive_attack
 ## What the proxy changes on top of the file
 
 - `unknown_tools: block` if the file doesn't set it.
-- `approval_scope` forced to `call` for every tool, and approvals are never reused (`Guard(reuse_approvals=False)`):
-  a yes covers the one call you saw, once; the prompt timeout (`--prompt-timeout`, 120 s) is the expiry.
+- `approval_scope` forced to `call` for every tool, and no approval is stored (`Guard(reuse_approvals=False)`):
+  each guarded call is asked when it happens, a yes lets exactly that call through right then, and the same call
+  later is asked again. An unanswered prompt is a no after `--prompt-timeout` (120 s); that is a prompt timeout,
+  not an approval expiry.
 - No request file, or an empty one: nothing counts as user-given.

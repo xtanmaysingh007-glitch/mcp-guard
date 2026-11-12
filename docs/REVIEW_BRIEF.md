@@ -68,9 +68,10 @@ call, and writes a JSON-lines audit log.
 - **Weak vs strong trusted tools.** Attacker-writable structured sources (contacts from emails, channel names)
   don't count for outward emails / URLs / IBANs under `strict_trust: typed` (default; plain names still do).
   Closes adaptive B1-B3 for one workspace task; `full` would cut slack perfect-agent utility 11/21 -> 4/21.
-- **Confirm mode, call-bound approvals.** A confirmable call is shown to the user instead of blocked; a yes covers
-  that value (value scope) or that exact call once (call scope; the proxy always uses one-time call approvals
-  that expire with the prompt). Declines stick, and after two the guard stops asking.
+- **Confirm mode.** A confirmable call is shown to the user instead of blocked. In the AgentDojo harness a yes is
+  reused for the session (value scope: that value; both scopes: the identical call isn't asked again), so it is
+  neither one-time nor expiring; the proxy stores nothing and asks for every guarded call. Declines stick, and
+  after two the guard stops asking. (Corrected after the independent review.)
 - **Write-then-read tracking.** Values the agent wrote into a non-trusted tool stay untrusted when a trusted tool
   returns them (adaptive C2b, laundering).
 - **Message-to-self check.** For sends whose every recipient is the user, a body copying 6+ words of untrusted

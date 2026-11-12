@@ -51,7 +51,8 @@ def attacker_actions(suite_name, injection_id, trust=None):
             out.append((c.function, dict(c.args), d))
         if d.allowed:
             result, err = runtime.run_function(env, c.function, dict(c.args))
-            g.observe_output(c.function, tool_result_to_str(result) if err is None else f"{result}\n{err}")
+            g.record_result(c.function, dict(c.args), tool_result_to_str(result) if err is None else f"{result}\n{err}",
+                            is_error=err is not None)
     return out
 
 

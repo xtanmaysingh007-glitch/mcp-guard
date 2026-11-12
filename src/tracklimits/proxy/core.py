@@ -114,6 +114,7 @@ class GuardedProxy:
                 result = await self.upstream.call_tool(tool, args)
             except MCPError:
                 raise                                  # the server's own protocol error, passed through
-            # Record what came back. An error result is never trusted, even from a trusted tool.
-            self.guard.observe_output(tool if not result.is_error else "", result_text(result))
+            # Record what came back (Guard.record_result: an error result is never trusted, even from a trusted
+            # tool, and a trusted tool's echo of its own arguments doesn't count).
+            self.guard.record_result(tool, args, result_text(result), is_error=bool(result.is_error))
             return result

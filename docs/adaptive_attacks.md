@@ -270,13 +270,17 @@ So a refusal really never reaches the tool, not just in the guard's bookkeeping.
 
 - **value** (default, the setting of every result so far): a yes covers the approved values in that
   argument of that tool for the rest of the session.
-- **call**: a yes covers only that exact call, once.
+- **call**: a yes covers only that exact call (and, through P2, the identical call again for the rest of the
+  session; not one-time).
   - The key is a SHA-256 of the tool name plus all arguments, with strings lower-cased and spaces
     collapsed. URLs keep their query string, unlike the canonical URL used for declines, so
     `x.com/a?to=evil@...` is a different call from `x.com/a`.
-  - A changed recipient, body or any other argument asks again, and so does the same call a second time.
-  - Approvals given ahead of the call (`Guard.approve_call`, e.g. a proxy that blocks, asks, and lets the
-    agent retry) are used once and expire after `approval_ttl_calls` (5) checked calls.
+  - A changed recipient, body or any other argument asks again. (Before P2 the same call a second time
+    asked again too; since P2 it doesn't, in either scope.)
+  - Approvals given ahead of the call (`Guard.approve_call`) are used once and expire after
+    `approval_ttl_calls` (5) checked calls, but nothing calls it except tests.
+
+  What the code actually does (corrected 2026-11-12, after the independent review): in the AgentDojo harness a yes is REUSED for the rest of the session (value scope: that value in that argument; both scopes: the exact same call is not asked again, P2); it is not one-time and does not expire. `always_confirm` tools ask every time. The proxy stores no approval at all: each guarded call is asked when it happens, a yes lets exactly that call through right then, and the same call later is asked again; an unanswered prompt counts as no after `--prompt-timeout`. The one-use, expiring `Guard.approve_call` exists but has no caller outside tests.
 
 Oracle prompts per clean task:
 
@@ -383,7 +387,19 @@ to end through the AgentDojo executor on the real environment, R3 through the re
 | R8 | `observe_output` is quadratic on long tokens and runs of spaces (40,000 chars ~16 s) | 1 MB in a subprocess, 20 s cap |
 | R9 | URLs are lower-cased whole (`pastebin.com/AbCdEfGh` == `.../abcdefgh`); a value-scope yes ignores the query string; the reuse key lower-cases every argument | guard, confirm mode |
 
-Status after each phase is in the table below (updated as fixes land).
+Status after each phase (updated as fixes land):
+
+| id | phase 2 (P0) | phase 3 (P1) |
+|---|---|---|
+| R1 | fixed: every non-empty guarded value is checked | |
+| R2 | open | |
+| R3 | fixed: guarded values parsed whole (urllib.parse, address parser), userinfo / quoted local parts refused | |
+| R4 | URL arguments fixed (an IP, `.zip` or `.cloud` value is a URL, so weak names don't fill it); free-text links still open | |
+| R5 | fixed: `Guard.record_result` (errors untrusted, own arguments not vouched for) on every path | |
+| R6 | fixed: strict loader, names checked against the tools; agentdojo.yaml repaired | |
+| R7 | fixed: argument names JSON-quoted | |
+| R8 | open | |
+| R9 | query string fixed (approvals keyed on the exact value); case folding open | |
 
 ## What is still open, and why
 

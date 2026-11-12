@@ -79,9 +79,10 @@ why you are asked: these values are not traceable to your request or a trusted t
 If you did not ask for this, say no. Approve this one call? [y/N]
 ```
 
-- Only `y` / `yes` approves. A yes covers that one call with those exact arguments, once. The same call
-  again is asked again (in the AgentDojo runs a yes could be reused; the proxy turns that off).
-- No answer within the timeout is a no. After two no's in a session the guard stops asking and blocks.
+- Only `y` / `yes` approves. The proxy stores no approval: a yes lets that one call, with exactly the arguments
+  shown, go through right then, and the same call later is asked again (the AgentDojo harness, by contrast,
+  reuses a yes for the session). There is no stored approval to expire.
+- No answer within `--prompt-timeout` is a no. After two no's in a session the guard stops asking and blocks.
 - stdin and stdout are the MCP pipe, so the prompt goes to the terminal directly (`/dev/tty`, or the
   Windows console). If the host starts the proxy without a terminal, there is nowhere to ask, so calls that
   would be asked about are blocked instead.

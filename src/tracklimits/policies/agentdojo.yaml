@@ -101,7 +101,7 @@ outward_args:
   reserve_restaurant: [restaurant]
   reserve_car_rental: [company]
 
-forbid_tainted: tool -> arguments that must not contain values taken only from untrusted data.
+# forbid_tainted: tool -> arguments that must not contain values taken only from untrusted data.
 #   (ID-style args such as email_id / file_id are deliberately left out in v1 - they would block
 #   many legitimate flows; adding them is an ablation.)
 

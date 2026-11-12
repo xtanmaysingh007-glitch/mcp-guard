@@ -49,7 +49,7 @@ def test_skeleton_explains_each_section():
     text = skeleton([{"name": "x"}])
     for section in ("safe_tools", "forbid_tainted", "confirmable", "always_confirm", "trusted_tools"):
         assert f"# {section}:" in text, section
-    assert "args: to, body" in skeleton(TOOLS_LIST["tools"])      # argument names shown as a hint
+    assert 'args: "to", "body"' in skeleton(TOOLS_LIST["tools"])      # argument names shown as a hint
 
 
 def test_cli_writes_file_and_refuses_to_overwrite(tmp_path):

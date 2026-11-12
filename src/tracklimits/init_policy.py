@@ -84,7 +84,9 @@ def skeleton(tools: list[dict]) -> str:
         if t.get("description"):
             hint.append(_one_line(t["description"]))
         if props:
-            hint.append("args: " + ", ".join(props))
+            # names are JSON-quoted on one line: a name with a newline must not end the comment and add keys
+            # to the policy (review R7: "to\nsafe_tools: [send_email]" did exactly that)
+            hint.append("args: " + _one_line(", ".join(json.dumps(str(n)) for n in props)))
         lines.append(f"  - {json.dumps(t['name'])}" + (f"   # {' | '.join(hint)}" if hint else "") + "\n")
     if not tools:
         lines.append("  []\n")

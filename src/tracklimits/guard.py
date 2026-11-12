@@ -49,7 +49,7 @@ class Guard:
         self.blocked_times: dict[str, int] = {}  # call key -> times plainly blocked this session
         # Approvals are scoped: a yes covers that exact value in that argument of that tool, nothing more.
         # (They used to become "user-given" everywhere, so approving a link also approved an IBAN inside it.)
-        self.approved: set[tuple[str, str, str]] = set()  # (tool, arg, canonical atom)
+        self.approved: set[tuple[str, str, str]] = set()  # (tool, arg, value parsed whole)
         # Calls the user said yes to in a prompt (approval_key: tool + canonical args). The same call again is
         # not asked again in this session (any changed argument is a different call), except always_confirm
         # tools, which ask every time. Approvals given ahead of time (approve_call) stay one-use.
@@ -70,11 +70,24 @@ class Guard:
             self.prov.add_user(identity)
         self.n_sessions += 1
 
-    def observe_output(self, tool: str, output: str) -> None:
-        if tool in self.policy.trusted_tools:
-            self.prov.add_trusted(output, weak=tool in self.policy.weak_trusted_tools)
-        else:
+    def record_result(self, tool: str, args: dict[str, Any] | None, output: str, is_error: bool = False) -> None:
+        """Record what a tool call returned. The ONE way results reach the provenance (AgentDojo adapter, MCP
+        proxy, both replay scripts), so a replay decides exactly like a live run.
+        - An error is never trusted, not even from a trusted tool: its text often repeats the input
+          ("Channel x\nMallory\ny not found"), which would make the attacker's value trusted (review R5).
+        - A trusted tool's output is trusted value by value, minus the call's own untraceable arguments: a
+          lookup that echoes its query ({"query": "<attacker>"}) does not vouch for the query (R5)."""
+        if is_error or tool not in self.policy.trusted_tools:
             self.prov.add_untrusted(output)
+            return
+        own: set[tuple[str, str]] = set()
+        for value in (args or {}).values():
+            own |= self.prov.own_untraceable(value)
+        self.prov.add_trusted(output, weak=tool in self.policy.weak_trusted_tools, also_distrust=own)
+
+    def observe_output(self, tool: str, output: str) -> None:
+        """Older form of record_result for a successful call whose arguments don't matter (tests, benchmarks)."""
+        self.record_result(tool, None, output, is_error=False)
 
     @staticmethod
     def _retry_key(tool: str, args: dict[str, Any]) -> str:
@@ -115,7 +128,7 @@ class Guard:
                 no_weak = self.policy.no_weak_kinds(outward)
                 atoms = (self.prov.unverified_atoms(args[arg], typed_only, no_weak) if self.policy.mode == "allowlist"
                          else self.prov.tainted_atoms(args[arg], typed_only, no_weak))
-                atoms = [a for a in atoms if (tool, arg, canonical(a)) not in self.approved]
+                atoms = [a for a in atoms if (tool, arg, a) not in self.approved]   # exact value, query included
                 if atoms:
                     bad[arg] = atoms
         for arg, issues in self._self_note_issues(tool, args).items():
@@ -163,11 +176,11 @@ class Guard:
         return out
 
     def _remember_approval(self, tool: str, args: dict[str, Any], bad: dict[str, list[str]]) -> None:
-        """Approve only the values the user saw as a whole (a recipient, a URL). An email or IBAN hidden
-        INSIDE an approved URL (e.g. in its query string) is not approved."""
+        """Value scope: approve the values the user saw, each parsed whole (a recipient, a URL with its query
+        string). A yes to news-site.com/a doesn't cover news-site.com/a?leak=... (review R9)."""
         for arg, atoms in bad.items():
             shown = {primary_atom(s) for s in iter_strings(args[arg])}
-            self.approved |= {(tool, arg, canonical(a)) for a in atoms if a in shown}
+            self.approved |= {(tool, arg, a) for a in atoms if a in shown}
 
     def check_call(self, tool: str, args: dict[str, Any]) -> Decision:
         self.n_calls += 1

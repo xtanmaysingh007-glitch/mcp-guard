@@ -48,7 +48,8 @@ argument must trace to the user's request or to a trusted tool's whole-value out
   call for send_email, send_direct_message, send_channel_message, create_file, append_to_file, post_webpage;
   results before that used value everywhere); call = a yes covers one
   exact call once (SHA-256 of tool + call_canonical args, URL query kept); Guard.approve_call(...) stores an
-  approval ahead of the call, one use, expires after approval_ttl_calls (5) checked calls.
+  approval ahead of the call, one use, expires after approval_ttl_calls (5) checked calls; NO caller outside
+  tests. AgentDojo runs reuse a yes for the whole session (value scope + P2): not one-time, no expiry.
 - `src/tracklimits/provenance.py` normalize(): zero-width, NFKC, defang (hxxp, [.], [at], "x at y dot com"),
   percent-decoding, split-line joining, bare domains (common TLDs only), loose IBANs, base64. Only ADDS atoms
   (raw atoms are always kept). URL atoms compare without scheme / www / trailing slash (path+query kept).
@@ -541,7 +542,8 @@ strict_trust off and value scope). 6. Rename, README (his voice), CI, LICENSE, l
   forwarded with the checked args, result -> observe_output (error results never trusted). Request file re-read
   every call; changed text = guard.start_session (new task). No/empty file = nothing user-given. Policy file
   without unknown_tools -> block; approval scope forced to call; Guard(reuse_approvals=False) (new option,
-  commit f30d650): a yes covers one call once, no P2 reuse, no value scope; the prompt timeout is the expiry.
+  commit f30d650): nothing is stored, every guarded call is asked when it happens (a yes lets exactly that
+  call through then; the same call later is asked again); an unanswered prompt is a no after the timeout.
 - Prompts go to /dev/tty or the Windows console (stdin/stdout are the MCP pipe); no terminal -> block only.
   TerminalConfirm is tested with fake input only, NOT tried by hand in a real terminal yet.
 - tests/toy_mcp_server.py (read_inbox with an injected email, send_email, get_webpage; logs executed calls to
@@ -564,7 +566,7 @@ strict_trust off and value scope). 6. Rename, README (his voice), CI, LICENSE, l
   two-phase guard API; NOT done (docs/proxy.md says so). Proxy spec checklist (stdio + command after --,
   tools/list unchanged, check_call, trusted/untrusted recording, request file re-read / never a tool / empty =
   nothing user-given, unknown_tools block, descriptions ignored, terminal prompt with tool + exact args + why,
-  one-time call-bound approval with the prompt timeout as expiry, held call never forwarded, JSONL audit, toy
+  no stored approval (each call asked; unanswered = no), held call never forwarded, JSONL audit, toy
   server, e2e tests a-e): all met except batching.
 Design notes still open:
 - P3, batch prompts per model turn: when one model turn makes several guarded calls, show them to the user
@@ -573,7 +575,7 @@ Design notes still open:
   attacker calls allowed. Not done in the AgentDojo harness (it asks per call); belongs in the proxy UI.
 - unknown_tools: block, with `python -m tracklimits init` to write the starting policy.
 - Async approval: block the call, show it to the user, let the agent retry; Guard.approve_call stores the
-  yes (one use, expires after approval_ttl_calls).
+  yes (one use, expires after approval_ttl_calls). Not wired up anywhere yet.
 
 ## Packaging (2026-11-10)
 pyproject.toml (setuptools>=77, SPDX license MIT + LICENSE): package tracklimits 0.1.0, Python >=3.10, core dep only
@@ -645,6 +647,21 @@ allowed, only the env's "not found" stopped it); R6 4 malformed files load, no a
 duplicate forbid_tainted; R7 init skeleton ends with safe_tools [send_email, wire_money]; R8 1 MB > 20 s; R9
 three case / query cases. Plan: phase 2 P0 (whole-argument parsing, Guard.record_result, strict loader, yaml, init),
 phase 3 P1 (R2 rules, R8 scanning, R9 keys, attribution), phase 4 replay of all frozen logs.
+Phase 2 (P0) DONE: (1) guarded arguments parsed WHOLE (provenance.whole_atom): email via email.utils.parseaddr
++ strict address pattern (no quotes; "Name <addr>" allowed), URL via urllib.parse.urlsplit (no userinfo, no
+spaces/quotes, real host; scheme-less "host.tld/..." and IPs count as URLs, not names), IBAN, else a plain value;
+empty, unparseable, or a "name" with a link/email/IBAN inside -> ("bad", ...) = never trusted; no 3-char minimum
+(R1). The trusted side parses leaves and request tokens with the same parser. (2) Guard.record_result(tool,
+args, output, is_error): errors never trusted (also from trusted tools); a trusted tool's leaves equal to the
+call's own untraceable args (also line by line / after "key: ") are not trusted; used by the adapter, the proxy,
+replay_guard, replay_ground_truth and the oracle audit (observe_output kept as a thin alias for tests). (3) Strict
+Policy.from_yaml: duplicate keys, unknown keys, wrong shapes, empty file -> ValueError; tool_args= checks tool
+and argument names (policy_for passes the four suites' real tool arguments; agentdojo.yaml passes). (4)
+agentdojo.yaml line ~104 got its "#" back (no duplicate forbid_tainted). (5) init JSON-quotes argument names.
+Side fix (else a regression): value-scope approvals keyed on the exact parsed value with its query string (R9's
+query part). Docs corrected: no claim of one-time / expiring approvals remains (see above).
+Tests: R1, R3, R4 (URL args), R5 x2, R6 x6, R7, R9-query unmarked and passing; still strict xfail: R2 x2, R4 free
+text x4, R8, R9 case x2. Suite 274 passed / 3 skipped / 19 xfailed.
 
 ## Kaggle recipe (free, runs without the laptop)
 Notebook with GPU T4 x2, Internet on, ONE cell: install zstd/pciutils, `curl ollama.com/install.sh | sh`,

@@ -391,7 +391,8 @@ def test_approval_covers_canonical_url_but_not_values_in_its_query():
     assert g.check_call("get_webpage", {"url": "https://news-site.com/a/"}).allowed  # same page: not asked again
     assert len(asked) == 1
     d = g.check_call("get_webpage", {"url": "www.news-site.com/a?to=evil@attacker.com"})
-    assert d.asked and d.tainted == {"url": ["evil@attacker.com"]}            # the hidden email is asked about
+    # another query string is another value: asked about as a whole (the hidden email included)
+    assert d.asked and d.tainted == {"url": ["news-site.com/a?to=evil@attacker.com"]}
 
 
 def test_normalize_does_not_invent_atoms_in_ordinary_text():

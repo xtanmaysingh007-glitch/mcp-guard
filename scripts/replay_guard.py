@@ -43,11 +43,15 @@ def replay(log_path: str, defense: str) -> dict:
                 verdict = ("ALLOW" if d.allowed else "BLOCK") + (" (asked)" if d.asked else "")
                 print(f"  {call['function']}({json.dumps(call['args'])[:70]}) -> {verdict} {d.reason[:80]}")
         elif m["role"] == "tool":
-            # The guard only sees outputs of calls it would allow now, and only ones that actually ran.
-            # (A call blocked in the original run has no real output in the log, so nothing to observe.)
+            # The guard only sees outputs of calls it would allow now, recorded exactly like the live adapter does
+            # (Guard.record_result: errors untrusted). A call blocked in the original run has no real output in
+            # the log (only the guard's refusal), so there is nothing to record.
             d = decisions.get(m["tool_call_id"])
-            if d is not None and d.allowed and not m.get("error"):
-                guard.observe_output(m["tool_call"]["function"], text(m["content"]))
+            err = m.get("error") or ""
+            if d is not None and d.allowed and not err.startswith("blocked:"):
+                out = text(m["content"]) if not err else f"{text(m['content'])}\n{err}"
+                guard.record_result(m["tool_call"]["function"], dict(m["tool_call"].get("args") or {}), out,
+                                    is_error=bool(err))
     return guard.stats()
 
 
