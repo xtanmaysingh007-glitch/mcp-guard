@@ -8,7 +8,8 @@
 The README holds each table between <!-- table:NAME --> and <!-- /table:NAME --> markers; --write replaces what is
 between them, --check compares. Without --archive the script reads results/archive.json: if the archive is
 published there ("published": true) it downloads it (checking its SHA-256) and rebuilds; if not, it can only
-compare the README with results/tables.md, the last tables built from the archive, and says so.
+compare the README with results/tables.md, the last tables built from the archive, and says so. If the newest
+published archive lacks a run (logs-v1 has no F10), the tables it can't rebuild are compared with results/tables.md.
 
 How each number is counted (the same rules as scripts/attribution.py):
 - a pair = one user task x one injection task; a table is scored on the pairs EVERY row of it finished
@@ -42,7 +43,7 @@ from attribution import CANARIES, TRACE_SCORED, classify  # noqa: E402
 
 ARCHIVE_INFO = ROOT / "results" / "archive.json"
 TABLES_MD = ROOT / "results" / "tables.md"
-SHORT = {"none": "none", "mcp_guard": "tracklimits (plain)", "mcp_guard_confirm_oracle": "confirm, oracle user",
+SHORT = {"none": "none", "mcp_guard": "tracklimits (plain)", "tracklimits": "tracklimits (plain)", "mcp_guard_confirm_oracle": "confirm, oracle user",
          "mcp_guard_confirm_yes": "confirm, user says yes to all", "mcp_guard_trust_full": "plain, strict_trust full",
          "mcp_guard_confirm_oracle_trust_full": "confirm oracle, strict_trust full",
          "mcp_guard_no_trusted": "ablation: no trusted tools", "mcp_guard_no_links": "ablation: no link checks"}
@@ -154,31 +155,39 @@ def table(archive, rows, title, confirm_col=True):
     return "\n".join(lines)
 
 
+G = ["none", "mcp_guard", "mcp_guard_confirm_oracle", "mcp_guard_confirm_yes", "mcp_guard_trust_full",
+     "mcp_guard_confirm_oracle_trust_full"]
+# README table name -> (rows [(run, defense)], title, show the prompts column)
+SPECS = {
+    "slack": ([("F1", d) for d in G],
+              "Slack, important_instructions, Qwen2.5-7B, 21 user tasks x injection tasks 0-4", True),
+    "banking": ([("F2", d) for d in ["none", "mcp_guard", "mcp_guard_confirm_oracle", "mcp_guard_confirm_yes",
+                                     "mcp_guard_trust_full", "mcp_guard_confirm_oracle_trust_full",
+                                     "mcp_guard_no_trusted", "mcp_guard_no_links"]],
+                "Banking, tool_knowledge, Qwen2.5-7B, 12 injectable user tasks x injection tasks 0-4", True),
+    "ablations": ([("F1", "none"), ("F1", "mcp_guard"), ("F4", "mcp_guard_no_trusted"), ("F4", "mcp_guard_no_links"),
+                   ("F1", "mcp_guard_trust_full")], "Slack ablations, same settings as the slack table", False),
+    "confirm": ([("F1", "none"), ("F1", "mcp_guard"), ("F5", "mcp_guard_confirm_oracle"), ("F5", "mcp_guard_confirm_yes"),
+                 ("F5", "mcp_guard_confirm_oracle_trust_full")],
+                "Slack confirm mode on the current approval rules (F5: an exact call the user approved is not asked "
+                "again), same settings as the slack table", True),
+    "workspace_f7r": ([("F7r", d) for d in ["none", "mcp_guard", "mcp_guard_confirm_oracle"]],
+                      "Workspace, important_instructions, Qwen2.5-14B, user tasks 4 13 15 19 20 x injection tasks 0-9",
+                      True),
+    "workspace_f9": ([("F9", d) for d in ["none", "mcp_guard", "mcp_guard_confirm_oracle"]],
+                     "Workspace, important_instructions, Qwen2.5-14B, frozen clock, user tasks 4 13 15 19 20 x injection "
+                     "tasks 10-13", True),
+    "banking_f10": ([("F10", d) for d in ["none", "tracklimits"]],
+                    "HELD-OUT banking, tool_knowledge, Qwen2.5-7B, frozen clock, 12 injectable user tasks x injection "
+                    "tasks 5-8 (never run live before)", False),
+}
+
+
 def build(archive: Path) -> dict[str, str]:
-    G = ["none", "mcp_guard", "mcp_guard_confirm_oracle", "mcp_guard_confirm_yes", "mcp_guard_trust_full",
-         "mcp_guard_confirm_oracle_trust_full"]
-    return {
-        "slack": table(archive, [("F1", d) for d in G],
-                       "Slack, important_instructions, Qwen2.5-7B, 21 user tasks x injection tasks 0-4"),
-        "banking": table(archive, [("F2", d) for d in ["none", "mcp_guard", "mcp_guard_confirm_oracle",
-                                                       "mcp_guard_confirm_yes", "mcp_guard_trust_full",
-                                                       "mcp_guard_confirm_oracle_trust_full", "mcp_guard_no_trusted",
-                                                       "mcp_guard_no_links"]],
-                         "Banking, tool_knowledge, Qwen2.5-7B, 12 injectable user tasks x injection tasks 0-4"),
-        "ablations": table(archive, [("F1", "none"), ("F1", "mcp_guard"), ("F4", "mcp_guard_no_trusted"),
-                                     ("F4", "mcp_guard_no_links"), ("F1", "mcp_guard_trust_full")],
-                           "Slack ablations, same settings as the slack table", confirm_col=False),
-        "confirm": table(archive, [("F1", "none"), ("F1", "mcp_guard"), ("F5", "mcp_guard_confirm_oracle"),
-                                   ("F5", "mcp_guard_confirm_yes"), ("F5", "mcp_guard_confirm_oracle_trust_full")],
-                         "Slack confirm mode on the current approval rules (F5: an exact call the user approved is "
-                         "not asked again), same settings as the slack table"),
-        "workspace_f7r": table(archive, [("F7r", d) for d in ["none", "mcp_guard", "mcp_guard_confirm_oracle"]],
-                               "Workspace, important_instructions, Qwen2.5-14B, user tasks 4 13 15 19 20 x injection "
-                               "tasks 0-9"),
-        "workspace_f9": table(archive, [("F9", d) for d in ["none", "mcp_guard", "mcp_guard_confirm_oracle"]],
-                              "Workspace, important_instructions, Qwen2.5-14B, frozen clock, user tasks 4 13 15 19 20 x "
-                              "injection tasks 10-13"),
-    }
+    """Every table whose runs are all in this archive (logs-v1 has no F10, for example)."""
+    have = set(json.loads((archive / "MANIFEST.json").read_text(encoding="utf-8"))["runs"])
+    return {name: table(archive, rows, title, confirm_col=c) for name, (rows, title, c) in SPECS.items()
+            if {run for run, _ in rows} <= have}
 
 
 # ---------------------------------------------------------------- README blocks
@@ -201,9 +210,12 @@ def as_md(tables: dict[str, str]) -> str:
 
 
 def fetch_published() -> Path | None:
-    info = json.loads(ARCHIVE_INFO.read_text(encoding="utf-8"))
-    if not info.get("published"):
+    """The newest archive results/archive.json marks as published, downloaded and checked; None if none is."""
+    published = [x for x in json.loads(ARCHIVE_INFO.read_text(encoding="utf-8"))["archives"] if x.get("published")]
+    if not published:
         return None
+    info = published[-1]
+    print(f"using {info['release_tag']} ({info['asset']})")
     data = urllib.request.urlopen(info["url"], timeout=120).read()
     if hashlib.sha256(data).hexdigest() != info["sha256"]:
         sys.exit("downloaded archive does not match results/archive.json sha256")
@@ -228,8 +240,10 @@ def main():
         tables = blocks(TABLES_MD.read_text(encoding="utf-8"))
     else:
         tables = build(open_archive(src))
-        TABLES_MD.parent.mkdir(exist_ok=True)
         if not a.check:
+            if set(tables) != set(SPECS):
+                sys.exit(f"--write needs an archive with every run; this one lacks {sorted(set(SPECS) - set(tables))}")
+            TABLES_MD.parent.mkdir(exist_ok=True)
             TABLES_MD.write_text(as_md(tables), encoding="utf-8")
     if a.write:
         p = Path(a.write)
@@ -237,10 +251,16 @@ def main():
         print(f"wrote {len(tables)} tables into {p} and {TABLES_MD.relative_to(ROOT)}")
     elif a.check:
         have = blocks(Path(a.check).read_text(encoding="utf-8"))
-        bad = [k for k in tables if have.get(k) != tables[k]] + [k for k in have if k not in tables]
+        saved = blocks(TABLES_MD.read_text(encoding="utf-8"))
+        # tables this archive can't rebuild (runs added in a later, unpublished version) are compared with the
+        # last full build in results/tables.md instead
+        later = {k: saved[k] for k in saved if k not in tables}
+        bad = [k for k in tables if have.get(k) != tables[k]] + [k for k in later if have.get(k) != later[k]]
+        bad += [k for k in have if k not in tables and k not in later]
         if bad:
-            sys.exit(f"README tables differ from the archive: {', '.join(bad)} (run make_tables.py --write README.md)")
-        print(f"all {len(tables)} README tables match")
+            sys.exit(f"README tables differ: {', '.join(bad)} (run make_tables.py --archive <archive> --write README.md)")
+        print(f"all {len(have)} README tables match: {len(tables)} rebuilt from the logs"
+              + (f", {len(later)} ({', '.join(later)}) against results/tables.md (not in this archive)" if later else ""))
     else:
         print(as_md(tables))
 

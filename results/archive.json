@@ -1,9 +1,23 @@
 {
-  "published": true,
-  "release_tag": "logs-v1",
-  "asset": "tracklimits-frozen-logs.tar.gz",
-  "url": "https://github.com/xtanmaysingh007-glitch/tracklimits/releases/download/logs-v1/tracklimits-frozen-logs.tar.gz",
-  "sha256": "53f650e00f860aed3344d96756f96c909c33de05d8dc42d623e2926639fd62c4",
-  "built_by": "python scripts/build_archive.py --out runs/_release",
-  "note": "Set published to true once the asset is uploaded; CI then downloads it, checks the sha256 and rebuilds every README table from it."
+  "note": "Published releases are never changed; a new run goes into a new version. make_tables.py uses the newest entry with published true (set it once the asset is uploaded and its sha256 checked).",
+  "archives": [
+    {
+      "published": true,
+      "release_tag": "logs-v1",
+      "asset": "tracklimits-frozen-logs.tar.gz",
+      "url": "https://github.com/xtanmaysingh007-glitch/tracklimits/releases/download/logs-v1/tracklimits-frozen-logs.tar.gz",
+      "sha256": "53f650e00f860aed3344d96756f96c909c33de05d8dc42d623e2926639fd62c4",
+      "built_by": "python scripts/build_archive.py --out runs/_release",
+      "runs": "F1 F2 F4 F5 F7r F9"
+    },
+    {
+      "published": false,
+      "release_tag": "logs-v2",
+      "asset": "tracklimits-frozen-logs-v2.tar.gz",
+      "url": "https://github.com/xtanmaysingh007-glitch/tracklimits/releases/download/logs-v2/tracklimits-frozen-logs-v2.tar.gz",
+      "sha256": "0ce33366f86eaf21f4925f91e133ee0000dd1d9ec3b6c688399ba6ae820430e3",
+      "built_by": "python scripts/build_archive.py --out runs/_release --version 2",
+      "runs": "F1 F2 F4 F5 F7r F9 F10"
+    }
+  ]
 }

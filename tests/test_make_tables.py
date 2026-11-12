@@ -23,10 +23,17 @@ def test_replace_fills_empty_and_full_blocks_and_round_trips():
 def test_readme_tables_match_the_last_archive_build():
     readme = make_tables.blocks((ROOT / "README.md").read_text(encoding="utf-8"))
     built = make_tables.blocks((ROOT / "results" / "tables.md").read_text(encoding="utf-8"))
-    assert set(built) == {"slack", "banking", "ablations", "confirm", "workspace_f7r", "workspace_f9"}
+    assert set(built) == set(make_tables.SPECS) == {"slack", "banking", "ablations", "confirm", "workspace_f7r",
+                                                    "workspace_f9", "banking_f10"}
     assert readme == built
 
 
 def test_archive_info_is_pinned():
-    info = json.loads((ROOT / "results" / "archive.json").read_text(encoding="utf-8"))
-    assert len(info["sha256"]) == 64 and info["url"].endswith(info["asset"]) and isinstance(info["published"], bool)
+    archives = json.loads((ROOT / "results" / "archive.json").read_text(encoding="utf-8"))["archives"]
+    assert [a["release_tag"] for a in archives] == ["logs-v1", "logs-v2"]
+    # logs-v1 is published and must never change
+    assert archives[0]["published"] is True
+    assert archives[0]["sha256"] == "53f650e00f860aed3344d96756f96c909c33de05d8dc42d623e2926639fd62c4"
+    for a in archives:
+        assert len(a["sha256"]) == 64 and a["url"].endswith("/" + a["release_tag"] + "/" + a["asset"])
+        assert isinstance(a["published"], bool)
