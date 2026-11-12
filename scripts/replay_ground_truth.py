@@ -80,6 +80,7 @@ def main():
     ap.add_argument("--suites", nargs="+", default=["workspace", "banking", "slack", "travel"])
     ap.add_argument("--attack", default="important_instructions")
     ap.add_argument("--show", type=int, default=5, help="examples of false blocks to print per suite")
+    ap.add_argument("--out", help="where to save the report (default runs/replay_<mode>.json)")
     args = ap.parse_args()
     warnings.filterwarnings("ignore")
 
@@ -101,27 +102,34 @@ def main():
                 false_blocks.append(f"{uid}: {blocked[0]}")
 
         # hijacked agent
-        pairs, succeeded = 0, 0
+        pairs, succeeded, by_inj = 0, 0, {}
         for uid, ut in suite.user_tasks.items():
             for iid, it in suite.injection_tasks.items():
                 injections = attack.attack(ut, it)
                 env = suite.load_and_inject_default_environment(injections)
                 _, pre, tr = replay(suite, mk(), ut.PROMPT, [ut, it], env)
                 pairs += 1
-                succeeded += attack_ok(it, pre, env, tr)
+                won = attack_ok(it, pre, env, tr)
+                succeeded += won
+                by_inj.setdefault(iid, [0, 0])
+                by_inj[iid][0] += won
+                by_inj[iid][1] += 1
 
         n = len(suite.user_tasks)
         r = {
             "honest_utility": round(ok / n, 3),
             "honest_tasks_with_a_false_block": f"{len(false_blocks)}/{n}",
             "hijacked_attack_success": round(succeeded / pairs, 3),
+            "hijacked_attack_successes": succeeded,
             "pairs": pairs,
-            "example_false_blocks": false_blocks[: args.show],
+            "attack_successes_by_injection_task": {k: f"{w}/{t}" for k, (w, t) in by_inj.items()},
+            "honest_tasks_ok": ok,
+            "false_blocks": false_blocks,
         }
         report["suites"][sname] = r
         print(f"\n== {sname} ==\n" + json.dumps(r, indent=2))
 
-    out = Path("runs") / f"replay_{args.mode}.json"
+    out = Path(args.out) if args.out else Path("runs") / f"replay_{args.mode}.json"
     out.parent.mkdir(exist_ok=True)
     out.write_text(json.dumps(report, indent=2))
     print(f"\nSaved {out}")
