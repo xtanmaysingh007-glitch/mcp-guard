@@ -1,0 +1,9 @@
+{
+  "published": false,
+  "release_tag": "logs-v1",
+  "asset": "tracklimits-frozen-logs.tar.gz",
+  "url": "https://github.com/xtanmaysingh007-glitch/tracklimits/releases/download/logs-v1/tracklimits-frozen-logs.tar.gz",
+  "sha256": "53f650e00f860aed3344d96756f96c909c33de05d8dc42d623e2926639fd62c4",
+  "built_by": "python scripts/build_archive.py --out runs/_release",
+  "note": "Set published to true once the asset is uploaded; CI then downloads it, checks the sha256 and rebuilds every README table from it."
+}

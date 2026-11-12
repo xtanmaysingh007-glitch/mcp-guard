@@ -2,7 +2,8 @@
 #   core:      guard, policy, provenance, init, CLI and the MCP proxy, WITHOUT the AgentDojo extra
 #              (tests that need AgentDojo are skipped by tests/conftest.py), on Linux and Windows, Python 3.10-3.12
 #   agentdojo: the benchmark-side tests (adapter, executor parity, oracle audit, freeze-clock, ...) with the
-#              agentdojo extra. No model is called anywhere: these are offline tests.
+#              agentdojo extra, then the README's result tables rebuilt from the frozen-log archive. No model is
+#              called anywhere: these are offline tests.
 name: tests
 
 on:
@@ -54,3 +55,7 @@ jobs:
           python -m pip install -e ".[proxy,agentdojo,test]"
       - name: Tests
         run: python -m pytest -q -rs
+      - name: README tables match the frozen-log archive
+        # Downloads the release archive (pinned by sha256 in results/archive.json) and rebuilds every table;
+        # until the archive is published it can only compare the README with results/tables.md.
+        run: python scripts/make_tables.py --check README.md
