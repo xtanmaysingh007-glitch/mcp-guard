@@ -706,7 +706,7 @@ tracklimits, F2 settings), mainly to test inj 7 (update_password, R2) and the bl
 
 ## Release archive, tables, README (2026-11-12)
 - Archive `tracklimits-frozen-logs.tar.gz` (scripts/build_archive.py --out runs/_release; 2,193 files, 2.4 MB,
-  reproducible, sha256 53f650e0...; NOT PUBLISHED: waiting for Tanmay to confirm the redaction list). Holds
+  reproducible, sha256 53f650e0...; PUBLISHED 2026-11-12 as release logs-v1, asset verified by sha256). Holds
   F1 (_z11, dfd4d0e), F2 (_z10, dfd4d0e), F4 (_z13, 01e78da), F5 (_z12, 308b35a), F7r (_z16, 4168589), F9 (_z19,
   df7b8cb): only runs/**.json; commit = each Kaggle checkout's .git/HEAD; MANIFEST.json (commit, settings, first /
   last log time, sha256 per file), README.txt, REDACTIONS.md. Left out: ollama.log, cell printouts, the checkout.
@@ -725,7 +725,7 @@ tracklimits, F2 settings), mainly to test inj 7 (update_password, R2) and the bl
   attribution) instead of 20 (13 + 7), and the confirm table is on 88 shared pairs. results/archive.json
   (published false, url, sha256) + results/tables.md; CI agentdojo job runs `make_tables.py --check README.md`
   (published: download + rebuild; not yet: README vs results/tables.md only); tests/test_make_tables.py does the
-  latter in every job. AFTER PUBLISHING: upload the asset to release logs-v1, set "published": true.
+  latter in every job. Published: archive.json "published": true (dd19734); CI downloaded it, checked the sha256 and rebuilt all 6 tables: match (run 43177772988, 8/8 green).
 - README.md replaced from README_draft.md (commit f9aa810): stale Gemini / $5 / "real-model runs next" text gone;
   results tables, offline (review-freeze) table, adaptive summary, quick start with real proxy flags, worked
   example = examples/proxy_demo.py (client -> python -m tracklimits proxy -> toy server; Bob allowed with source
