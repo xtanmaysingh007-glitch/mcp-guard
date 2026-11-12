@@ -97,7 +97,7 @@ def main():
         else:                                      # old guard: what its adapter did (output + error text)
             guard.observe_output(call["function"], out)
 
-    logs = unique_logs(Path(a.runs))
+    logs = unique_logs(Path(a.runs).resolve())
     results, skipped, t0 = [], 0, time.time()
     for p in logs:
         d = json.loads(p.read_text(encoding="utf-8"))

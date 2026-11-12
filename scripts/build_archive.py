@@ -1,8 +1,12 @@
 """Build the release archive of the frozen Kaggle runs (logs only), with the commit each one ran on.
 
-  python scripts/build_archive.py --out <folder>        # writes <folder>/tracklimits-frozen-logs/ and the .tar.gz
+  python scripts/build_archive.py --out <folder>               # logs-v1: F1-F9 -> tracklimits-frozen-logs.tar.gz
+  python scripts/build_archive.py --out <folder> --version 2   # logs-v2: F1-F10 -> tracklimits-frozen-logs-v2.tar.gz
 
-Reads the extracted Kaggle outputs under runs/_zNN/mcp-guard/ (git-ignored, never changed). For each run it copies
+Version 1 is the published logs-v1 and must keep rebuilding byte for byte (sha256 53f650e0...); new runs only go
+into a new version.
+
+Reads the extracted Kaggle outputs under runs/_zNN/<checkout>/ (git-ignored, never changed). For each run it copies
 only runs/**.json (AgentDojo logs + summaries): no cell printout, no ollama.log, no repo checkout. The commit is
 read from that checkout's .git/HEAD, i.e. the code that actually ran.
 
@@ -29,6 +33,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from scan_archive import EMAIL, RESERVED, agentdojo_emails  # noqa: E402
 
 NAME = "tracklimits-frozen-logs"
+# version -> runs it holds (each a key of RUNS). Never change an existing version: it is published.
+VERSIONS = {1: ["F1", "F2", "F4", "F5", "F7r", "F9"], 2: ["F1", "F2", "F4", "F5", "F7r", "F9", "F10"]}
+# run -> folder name of the Kaggle checkout inside runs/<source> (older cells cloned the repo as mcp-guard)
+CHECKOUT = {"F10": "tracklimits"}
 # name -> (source folder under runs/, what it is). The commit comes from the run's own checkout.
 RUNS = {
     "F1": ("_z11", "slack, important_instructions, Qwen2.5-7B: none / mcp_guard / confirm_oracle / confirm_yes / "
@@ -42,6 +50,8 @@ RUNS = {
                     "4 13 15 19 20 x inj 0-9 + 5 clean"),
     "F9": ("_z19", "workspace, important_instructions, Qwen2.5-14B, --freeze-clock: none / mcp_guard / confirm_oracle, "
                    "user tasks 4 13 15 19 20 x inj 10-13 + 5 clean"),
+    "F10": ("_z20", "HELD-OUT banking, tool_knowledge, Qwen2.5-7B, --freeze-clock: none / tracklimits, user tasks 0 2 3 4 "
+                    "5 6 9 11 12 13 14 15 x inj 5-8 (never run live before) + 12 clean"),
 }
 README = """TrackLimits frozen logs (formerly mcp-guard)
 
@@ -58,16 +68,19 @@ Rebuild the tables: python scripts/make_tables.py --archive <this folder or the 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--out", required=True)
+    ap.add_argument("--version", type=int, default=1, choices=sorted(VERSIONS))
     a = ap.parse_args()
-    out = Path(a.out) / NAME
+    name = NAME if a.version == 1 else f"{NAME}-v{a.version}"
+    out = Path(a.out) / name
     if out.exists():
         shutil.rmtree(out)
     known = agentdojo_emails()
 
     files = {}  # archive-relative path -> text
-    manifest = {"name": NAME, "agentdojo": "0.1.35 (benchmark v1.2.2)", "runs": {}}
-    for run, (src, what) in RUNS.items():
-        base = ROOT / "runs" / src / "mcp-guard"
+    manifest = {"name": name, "agentdojo": "0.1.35 (benchmark v1.2.2)", "runs": {}}
+    for run in VERSIONS[a.version]:
+        src, what = RUNS[run]
+        base = ROOT / "runs" / src / CHECKOUT.get(run, "mcp-guard")
         commit = (base / ".git" / "HEAD").read_text().strip()
         assert re.fullmatch(r"[0-9a-f]{40}", commit), f"{run}: HEAD is not a detached commit: {commit}"
         stamps = []
@@ -112,10 +125,10 @@ def main():
     with tarfile.open(fileobj=buf, mode="w", format=tarfile.PAX_FORMAT) as tar:
         for rel in sorted(files):
             data = files[rel].encode("utf-8")
-            info = tarfile.TarInfo(f"{NAME}/{rel}")
+            info = tarfile.TarInfo(f"{name}/{rel}")
             info.size, info.mtime, info.mode, info.uname, info.gname = len(data), 0, 0o644, "", ""
             tar.addfile(info, io.BytesIO(data))
-    tgz = Path(a.out) / f"{NAME}.tar.gz"
+    tgz = Path(a.out) / f"{name}.tar.gz"
     with open(tgz, "wb") as f, gzip.GzipFile(fileobj=f, mode="wb", mtime=0, filename="") as gz:
         gz.write(buf.getvalue())
     print(f"{len(files)} files, {len(repl)} address(es) redacted -> {tgz} "

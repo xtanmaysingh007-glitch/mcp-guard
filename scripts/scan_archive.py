@@ -34,7 +34,7 @@ PATTERNS = {
     "kaggle path": r"/kaggle/[^\s\"']+",
 }
 # The owner's names and accounts (lower case). Matched as whole words.
-OWNER_WORDS = ["tanmay", "xtanmay", "xtanmaysingh007", "tan07", "toxic"]
+OWNER_WORDS = ["tanmay", "xtanmay", "xtanmaysingh007", "tan07", "toxic", "omen15"]
 EMAIL = re.compile(r"[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}")
 # Domains reserved for examples (RFC 2606 / RFC 6761): no real person can have an address there.
 RESERVED = re.compile(r"@(?:[a-z0-9\-]+\.)*(?:example\.(?:com|org|net)|[a-z0-9\-]+\.(?:invalid|test|example))$")
