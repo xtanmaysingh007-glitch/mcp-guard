@@ -60,7 +60,7 @@ call, and writes a JSON-lines audit log.
 
 ## 3. Key design decisions
 
-- **Default-deny (allowlist).** A guarded value must trace to the user or a trusted source. A blocklist ("taint"
+- **Default-deny on listed arguments (allowlist).** A value in an argument the policy lists must trace to the user or a trusted source. A blocklist ("taint"
   mode, kept for comparison) only stops values seen verbatim in untrusted data, so reworded or invented values
   pass. Cost: legitimate flows using untrusted data are blocked (slack clean 8/21 -> 4/21 in F1).
 - **Whole-value trust.** A trusted tool vouches only for a whole field or list item, never for an address

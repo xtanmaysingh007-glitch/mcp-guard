@@ -10,7 +10,7 @@
      - blocked:  send_email to an address read off an untrusted email (plain mode: refused)
      - safe:     a read-only tool (nothing to check)
      - confirm:  the blocked call in confirm mode, the "user" answering yes instantly every time (so this is
-                 the guard's own work, not a human's), one-time approvals (asked on every call)
+                 the guard's own work, not a human's), nothing stored between calls (asked on every call)
    Each call is timed alone (perf_counter_ns); median and 95th percentile in microseconds.
 2. The MCP proxy end to end (needs `pip install -e ".[proxy]"`): real processes over stdio, an MCP client
    calling the toy server directly vs through `python -m tracklimits.proxy`; the difference is the proxy's

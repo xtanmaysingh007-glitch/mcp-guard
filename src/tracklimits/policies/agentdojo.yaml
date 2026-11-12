@@ -7,8 +7,8 @@
 unknown_tools: allow
 
 # Approval scope (confirm mode): value = a yes covers that value in that argument for the session;
-# call = a yes covers only that exact call, once (approval_ttl_calls is the expiry for approvals given
-# ahead of the call). Default value, but call for tools whose free text the user should see every time
+# call = a yes covers only that exact call; the identical call is not asked again this session, and any changed
+# argument asks again (approval_ttl_calls only applies to approve_call, which nothing calls but tests). Default value, but call for tools whose free text the user should see every time
 # (messages, files, posts): a yes to "email Carol draft 1" is not a yes to "email Carol draft 2".
 # (Results before 2026-11-09 used value for every tool.)
 approval_scope: value

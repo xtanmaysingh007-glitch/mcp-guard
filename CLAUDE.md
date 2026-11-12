@@ -8,8 +8,8 @@ Repo: `tracklimits` (github.com/xtanmaysingh007-glitch/tracklimits). TrackLimits
 Provenance-based prompt injection defense for LLM agent tool calls. Formerly mcp-guard.
 A lightweight, CaMeL-inspired, rule-based provenance guard that protects LLM agents from indirect prompt
 injection. It sits between the agent and its tools and checks every tool call's arguments: a guarded
-argument must trace to the user's request or to a trusted tool's whole-value output (default-deny
-"allowlist" mode). A weaker "taint" mode (blocklist) exists for comparison. Evaluated on AgentDojo v1.2.2
+argument must trace to the user's request or to a trusted tool's whole-value output (default-deny on listed
+arguments; unlisted ones aren't checked; "allowlist" mode). A weaker "taint" mode (blocklist) exists for comparison. Evaluated on AgentDojo v1.2.2
 (suites: banking, slack, travel, workspace; workspace security measured with Qwen2.5-14B in F7r). Later: wrap as an MCP proxy for developers.
 
 ## Hard rules

@@ -34,7 +34,8 @@ The proxy (`tracklimits proxy`) also overrides a few things on top of the file, 
 ## What each one does, and why the default is what it is
 
 **`mode`** (`allowlist` / `taint`). Allowlist: a guarded argument must trace to the user's request or a trusted
-tool's output, otherwise it is refused (default-deny). Taint: only values seen verbatim in untrusted data are
+tool's output, otherwise it is refused (default-deny on listed arguments; arguments the policy doesn't list are
+not checked). Taint: only values seen verbatim in untrusted data are
 refused (a blocklist). Allowlist is the default because taint misses anything the model rewords or invents;
 taint exists for comparison.
 
