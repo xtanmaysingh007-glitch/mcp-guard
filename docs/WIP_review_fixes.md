@@ -18,7 +18,9 @@ Status file, so the work survives a context reset. Source: "TrackLimits: indepen
 |---|---|---|---|
 | 1 | `1ec319f` | green (8/8) | `tests/test_review_findings.py`: 25 strict xfail cases for R1-R9. Each failed on its assertion (checked with `--runxfail`); R1, R5 end to end on the real AgentDojo env, R3 end to end through the proxy. |
 | 2 | `9a551d7` | green (8/8) | Guarded args parsed whole (`provenance.whole_atom`: email via `parseaddr` + strict pattern, URL via `urlsplit`, no userinfo / quotes / spaces, IBAN, else plain; empty or unparseable = never trusted; no 3-char minimum). `Guard.record_result(tool, args, output, is_error)` on every path (adapter, proxy, both replays, oracle audit). Strict `Policy.from_yaml` (+ `tool_args=`). agentdojo.yaml "#" restored. init JSON-quotes argument names. Approval docs corrected. |
-| 3 | `96477a7` | running | R2: `secret_args` (a password must be a quoted token, exactly), request matches need >= 3 chars and a non-stop-word. R9: URLs lower-case scheme and host only; call approval key on exact strings. R8: caps (below) plus linear rewrites done before the cap decision. Attribution: "tool error" apart from "ran", `TRACE_SCORED` instead of the blanket override, `new_password` canary, disagreement list. |
+| 3 | `96477a7` | green | R2: `secret_args` (a password must be a quoted token, exactly), request matches need >= 3 chars and a non-stop-word. R9: URLs lower-case scheme and host only; call approval key on exact strings. R8: caps (below) plus linear rewrites done before the cap decision. Attribution: "tool error" apart from "ran", `TRACE_SCORED` instead of the blanket override, `new_password` canary, disagreement list. |
+
+| 4 | `a933fca`, `fe64dbd` (tag `review-freeze`) | green (8/8) | Replay of every frozen log, old guard (`1ec319f`) vs fixed, plus ground truth, argument coverage, clean utility / prompts: `docs/results_replay.md`. No attacker decision changed, nothing newly allowed, no ask changed, 38 new blocks (all model mistakes: empty recipient / hotel, recipient "me"), cap never hit; ground truth the same (0/809, travel 57/140). |
 
 ## Test status (after phase 3)
 
@@ -55,9 +57,10 @@ task 14's quoted password, a channel named in the request), 4 attribution self-t
 
 ## Left
 
-- **Phase 4:** replay every frozen log (all suites, all defenses) through the old guard (`edb44c6`) and the
-  fixed one; report changed decisions per suite and defense with examples, new utility and prompt counts, and the
-  ground-truth replay including travel (the review measured 57 of 140 travel pairs reaching the goal).
-- Then CLAUDE.md / adaptive_attacks.md final status, and push + CI.
+- **Phase 4: DONE** (see the table). Old guard taken as `1ec319f` = the commit before `9a551d7` (its guard code
+  is `edb44c6`'s; it only adds the xfail tests).
+- Optional live check: banking injection tasks 5-8 (never run live), none vs tracklimits, pinned to
+  `review-freeze`. Travel has no held-out injections (only 0-6 exist, all run live already).
+- adaptive_attacks.md final status line still to write.
 - Not in this plan: R4 in free text, R10 (unchecked arguments: design), R11 (proxy trust anchors), R12 (audit log
   keeps passwords), the written set across sessions, README rewrite (draft pending from Tanmay).
