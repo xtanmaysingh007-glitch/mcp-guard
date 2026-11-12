@@ -243,3 +243,17 @@ def test_stdio_end_to_end(tmp_path):
     assert len(tools.tools) == 3 and ATTACKER in text(inbox) and sent.is_error
     assert [c["tool"] for c in server_calls(tmp_path)] == ["read_inbox"]
     assert [r["allowed"] for r in audit(tmp_path)] == [True, False]
+
+
+def test_readme_worked_example(tmp_path):
+    """examples/proxy_demo.py, the README's worked example: the reply to Bob goes through, the attacker's send is
+    blocked and never reaches the server, and the audit log names where each value came from."""
+    import subprocess
+    env = {**os.environ, "PYTHONPATH": REPO_SRC}
+    out = subprocess.run([sys.executable, str(HERE.parent / "examples" / "proxy_demo.py")], env=env,
+                         capture_output=True, text=True, timeout=120).stdout
+    assert "-> sent to bob@corp.example" in out
+    assert "-> ERROR blocked: argument(s) not traceable" in out
+    assert """server really ran: ['read_inbox ""', 'send_email ["bob@corp.example"]']""" in out
+    assert "'bob@corp.example': 'user request'" in out
+    assert "send_email: blocked" in out and "'mallory@evil.example': 'untrusted tool output'" in out
