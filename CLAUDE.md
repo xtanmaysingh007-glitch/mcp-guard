@@ -695,6 +695,36 @@ Held-out run: travel has only injection tasks 0-6 and all 7 were already run liv
 nothing; banking inj 5-8 were never run live (frozen banking used 0-4) -> worth one time-bounded run (none vs
 tracklimits, F2 settings), mainly to test inj 7 (update_password, R2) and the block rate on unseen injections.
 
+## Release archive, tables, README (2026-11-12)
+- Archive `tracklimits-frozen-logs.tar.gz` (scripts/build_archive.py --out runs/_release; 2,193 files, 2.4 MB,
+  reproducible, sha256 53f650e0...; NOT PUBLISHED: waiting for Tanmay to confirm the redaction list). Holds
+  F1 (_z11, dfd4d0e), F2 (_z10, dfd4d0e), F4 (_z13, 01e78da), F5 (_z12, 308b35a), F7r (_z16, 4168589), F9 (_z19,
+  df7b8cb): only runs/**.json; commit = each Kaggle checkout's .git/HEAD; MANIFEST.json (commit, settings, first /
+  last log time, sha256 per file), README.txt, REDACTIONS.md. Left out: ollama.log, cell printouts, the checkout.
+- scripts/scan_archive.py (keys: Google/Gemini, GitHub, Kaggle, sk-, bearer, private keys, env assignments; Windows
+  / unix / kaggle paths; owner words; emails not in AgentDojo's package data; *.log): tested on planted values and
+  the F7r Kaggle folder (catches the /kaggle paths, the GitHub owner name, ollama.log). On the six runs: 0 keys, 0
+  paths, 0 owner words; only 8 model-invented emails. Redacted (same placeholder everywhere, so replay decisions
+  stay equal): dora@slacksite.com -> dora@redacted-1.invalid (6), dora@website.com -> -2 (78),
+  dora@www.dora-website.com -> -3 (115), eve@gmail.com -> eve@redacted-4.invalid (6). Kept (RFC 2606 reserved):
+  alice@, charlie@, dora@, your.email@example.com. REDACTIONS.md lists only the placeholders. Windows path limit:
+  build under runs/_release, not the scratchpad.
+- scripts/make_tables.py: 6 README tables (slack F1, confirm F5, banking F2, ablations F4, workspace F7r, F9)
+  between <!-- table:NAME --> markers, each row tagged with its run's commit; scored on pairs all rows share;
+  outcomes from attribution.classify; prompts = replay of clean logs through the CURRENT guard (F1/F4/F5 have no
+  summary files). Matches the CLAUDE.md numbers except banking none: 18 wins (13 + 5) + 2 tool error (phase-3
+  attribution) instead of 20 (13 + 7), and the confirm table is on 88 shared pairs. results/archive.json
+  (published false, url, sha256) + results/tables.md; CI agentdojo job runs `make_tables.py --check README.md`
+  (published: download + rebuild; not yet: README vs results/tables.md only); tests/test_make_tables.py does the
+  latter in every job. AFTER PUBLISHING: upload the asset to release logs-v1, set "published": true.
+- README.md replaced from README_draft.md (commit f9aa810): stale Gemini / $5 / "real-model runs next" text gone;
+  results tables, offline (review-freeze) table, adaptive summary, quick start with real proxy flags, worked
+  example = examples/proxy_demo.py (client -> python -m tracklimits proxy -> toy server; Bob allowed with source
+  "user request", mallory blocked "untrusted tool output", server ran read_inbox + Bob only; tested in
+  tests/test_proxy.py::test_readme_worked_example); limitations keep the travel breakdown and argument coverage.
+  Wording: "default-deny on listed arguments"; no one-time / expiring approval claims (only approve_call has them,
+  and nothing calls it). Suite 290 passed / 3 skipped / 14 xfailed.
+
 ## Kaggle recipe (free, runs without the laptop)
 Notebook with GPU T4 x2, Internet on, ONE cell: install zstd/pciutils, `curl ollama.com/install.sh | sh`,
 start server with `subprocess.Popen("nohup ollama serve > /kaggle/working/ollama.log 2>&1 &", shell=True,
