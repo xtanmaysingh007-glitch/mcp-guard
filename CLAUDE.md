@@ -633,6 +633,19 @@ AgentDojo-only; the new tracklimits.exe was NOT blocked by Application Control t
 ran). replay_guard.py on a frozen F7r log with defense "mcp_guard" == with "tracklimits"; attribution over the
 F7r folders gives the same 15/15, 16/16, 16 as before, labelled "mcp_guard (= tracklimits)".
 
+## Independent review of edb44c6 (2026-11-12): R1-R9
+Source: ~/Downloads/"TrackLimits independent security review.pdf" (21 pages; R1-R12, R10 design limit, R11
+potential, R12 optional). Its proof scripts were NOT in the repo (no review_poc/), so tests/test_review_findings.py
+rebuilds each proof from the written scenario (R1, R5 end to end on the real AgentDojo env via
+GuardedToolsExecutor; R3 end to end through the proxy + toy server). Phase 1 (2026-11-12): all 25 cases are
+strict xfails and each fails on its security assertion today (checked with --runxfail): R1 pw runs; R2
+"please"/"the bill" pass as passwords; R3 both disguised hosts forwarded; R4 weak channel IP/.zip/.cloud fill
+get_webpage, odd body links pass; R5 echoed input + slack error text trusted (add_user_to_channel(Mallory)
+allowed, only the env's "not found" stopped it); R6 4 malformed files load, no argument check, agentdojo.yaml
+duplicate forbid_tainted; R7 init skeleton ends with safe_tools [send_email, wire_money]; R8 1 MB > 20 s; R9
+three case / query cases. Plan: phase 2 P0 (whole-argument parsing, Guard.record_result, strict loader, yaml, init),
+phase 3 P1 (R2 rules, R8 scanning, R9 keys, attribution), phase 4 replay of all frozen logs.
+
 ## Kaggle recipe (free, runs without the laptop)
 Notebook with GPU T4 x2, Internet on, ONE cell: install zstd/pciutils, `curl ollama.com/install.sh | sh`,
 start server with `subprocess.Popen("nohup ollama serve > /kaggle/working/ollama.log 2>&1 &", shell=True,

@@ -9,7 +9,7 @@ import pytest
 
 HAVE_AGENTDOJO = importlib.util.find_spec("agentdojo") is not None
 AGENTDOJO_FILES = ["test_adaptive.py", "test_executor.py", "test_executor_parity.py", "test_freeze_clock.py",
-                   "test_oracle_audit.py", "test_repeat_limit.py", "test_repeatability.py", "test_rename.py"]
+                   "test_oracle_audit.py", "test_repeat_limit.py", "test_repeatability.py", "test_rename.py", "test_review_findings.py"]
 collect_ignore = [] if HAVE_AGENTDOJO else AGENTDOJO_FILES
 
 
