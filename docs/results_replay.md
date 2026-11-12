@@ -193,6 +193,15 @@ pool every frozen batch of a defense; since not a single call's ask changed and 
 is newly refused, every batch on its own (F1, F5, F7r, F9, ...) keeps the numbers docs/PROJECT_NOTES.md gives for it. The 4
 extra blocks (3 banking, 1 travel) are the empty-recipient / empty-hotel calls above, in logs that failed anyway.
 
+## Held-out banking run (F10), live on the fixed guard
+
+F10 ran on the commit tagged `review-freeze` (the fixed guard), so it needs no old-vs-fixed replay: banking
+injection tasks 5-8, never run live before, 12 user tasks, none vs tracklimits (table in the README). none: 12
+pairs with an attacker call (8 full, 4 partial); tracklimits: 12 of 12 blocked, 0 wins; clean tasks 5/12 vs 4/12
+(user task 0: the bill's IBAN comes from `read_file`). Replaying its logs through the current guard reproduces the
+live decisions exactly: 90 refused calls refused again, 90 calls that ran allowed again, and the 2 calls issued at
+the step limit (never executed) would be refused.
+
 ## Caveats
 
 - Replays force the logged calls. A new refusal can't show what the model would have done next; only a live
