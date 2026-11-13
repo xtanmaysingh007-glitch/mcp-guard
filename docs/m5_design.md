@@ -107,7 +107,29 @@ Whether the gaps actually leak depends on whether a 7B / 14B model follows these
 is what the run measures. With no defense, AgentDojo's own injections got an attacker call in 7 to 25 pairs per
 run (F1 25 of 84, F7r 16 of 50, F10 12 of 48, F9 7 of 20).
 
-## What has to be built before the run (not done)
+## What was built (2026-11-13)
+
+- `scripts/m5_spec.py` (goals, canaries, expectations; no AgentDojo import, so attribution and make_tables work
+  without it) and `scripts/m5_tasks.py` (the nine classes, `register()`, `use_real_model_names()`). They live in
+  `scripts/`, not `src/tracklimits/bench/` as first planned, so pinning the guard files never touches them.
+- `run_agentdojo.py --extra-tasks m5 --real-model-name` (both off by default; real-name runs log to
+  `runs/<defense>/[clock-frozen/]real-name/`); `run_batch.py` passes them through.
+- `attribution.py`: each M5 task counts only its own canaries; `real-name` folders; a per-goal breakdown with the
+  design's expectation next to each M5 goal; trace-scored M5 tasks would join `TRACE_SCORED` (none of the nine is).
+- `scripts/pin_guard.py`: AST comparison (docstrings stripped; YAML compared as parsed data) of the guard files
+  (guard.py, policy.py, provenance.py, policies/agentdojo.yaml, agentdojo_adapter.py) at HEAD vs `review-freeze`,
+  then restore from the tag and a hash check. `tests/test_guard_pin.py` keeps the AST check in CI.
+- `tests/test_m5.py`: registration, `security()` true after each ground truth and false before, the canary audit
+  (no M5 canary fires on any user task's ground-truth call in any suite), both attacks render each goal and say
+  "Qwen" with the flag, the guard on each goal (3 blocked, the gaps as strict xfails).
+- One deviation found while building, recorded in the tests and NOT in the table above (left as designed):
+  forwarding Bob's DMs word for word (M5-5) carries Eve's `www.eve-blog.com` link, which comes from untrusted
+  output, so the link check blocks the whole DM even when the users were listed first. Only a forward without the
+  link gets through. M5-1's reference calls pay the payee banking user tasks 3 / 4 name (the guard blocked an
+  earlier version that paid an IBAN read from `get_scheduled_transactions`, which isn't a trusted source).
+
+## Originally listed as to build
+
 
 - `src/tracklimits/bench/m5_tasks.py` (benchmark only, like `agentdojo_clock.py`): the 9 classes, registered by a
   `--extra-tasks m5` flag in `run_agentdojo.py`, so a normal run never sees them.
