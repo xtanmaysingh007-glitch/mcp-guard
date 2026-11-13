@@ -23,6 +23,8 @@ jobs:
       PYTEST_DISABLE_PLUGIN_AUTOLOAD: "1"
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # history and tags: tests/test_guard_pin.py compares the guard files with review-freeze
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}
@@ -46,6 +48,8 @@ jobs:
       PYTEST_DISABLE_PLUGIN_AUTOLOAD: "1"
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # history and tags: tests/test_guard_pin.py compares the guard files with review-freeze
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}
