@@ -164,12 +164,15 @@ def pick_injection_tasks(all_ids, n_inj: int | None, numbers: list[str] | None) 
     return [t for t in ordered if t in wanted]
 
 
-def log_dir(defense: str, rep: int = 1, freeze_clock: bool = False) -> Path:
-    """runs/<defense>[/clock-frozen][/rep<N>]. Frozen-clock runs get their own folder: AgentDojo resumes from
-    whatever logs are in the folder, so the two kinds must never mix (and the folder labels the run)."""
+def log_dir(defense: str, rep: int = 1, freeze_clock: bool = False, real_name: bool = False) -> Path:
+    """runs/<defense>[/clock-frozen][/real-name][/rep<N>]. Frozen-clock and real-model-name runs get their own
+    folders: AgentDojo resumes from whatever logs are in the folder, so different kinds must never mix (and the
+    folder labels the run)."""
     d = Path("runs") / defense
     if freeze_clock:
         d = d / "clock-frozen"
+    if real_name:
+        d = d / "real-name"
     if rep > 1:
         d = d / f"rep{rep}"
     return d
@@ -200,12 +203,24 @@ def main():
     ap.add_argument("--freeze-clock", action="store_true",
                     help="fixed timestamps on newly created emails/files (agentdojo_clock.py); logs go to "
                          "runs/<defense>/clock-frozen/ and the summary says freeze_clock: true")
+    ap.add_argument("--extra-tasks", choices=["m5"], default=None,
+                    help="also register extra injection tasks: m5 = the nine guard-aware tasks in scripts/m5_tasks.py "
+                         "(banking inj 9-12, slack 6-8, workspace 14-15; pick them with --inj-tasks)")
+    ap.add_argument("--real-model-name", action="store_true",
+                    help="address the model by its own name in the injected text (\"Qwen\") instead of AgentDojo's "
+                         "\"Local model\"; logs to runs/<defense>/[clock-frozen/]real-name/")
     ap.add_argument("--rep", type=int, default=1, help="repeat number; rep 2+ logs to runs/<defense>/rep<N> so it doesn't reuse the cache")
     args = ap.parse_args()
     args.defense = resolve_defense(args.defense)
     if args.no_attack and args.skip_clean:
         ap.error("--no-attack and --skip-clean together would run nothing")
 
+    if args.extra_tasks or args.real_model_name:
+        import m5_tasks  # scripts/, benchmark side only
+        if args.extra_tasks == "m5":
+            m5_tasks.register()
+        if args.real_model_name:
+            m5_tasks.use_real_model_names()
     llm, name = build_llm(args.provider, args.model)
     pipeline, guard = build_pipeline(llm, name, args.defense)
     suite = get_suite(BENCH_VERSION, args.suite)
@@ -226,9 +241,10 @@ def main():
     if args.freeze_clock:
         from tracklimits.agentdojo_clock import freeze_clock
         freeze_clock()
-    logdir = log_dir(args.defense, args.rep, args.freeze_clock)
+    logdir = log_dir(args.defense, args.rep, args.freeze_clock, args.real_model_name)
     logdir.mkdir(parents=True, exist_ok=True)
-    out = {"model": name, "defense": args.defense, "suite": args.suite, "attack": args.attack, "rep": args.rep, "freeze_clock": args.freeze_clock, "user_tasks": user_tasks, "injection_tasks": inj_tasks}
+    out = {"model": name, "defense": args.defense, "suite": args.suite, "attack": args.attack, "rep": args.rep, "freeze_clock": args.freeze_clock,
+           "real_model_name": args.real_model_name, "extra_tasks": args.extra_tasks, "user_tasks": user_tasks, "injection_tasks": inj_tasks}
 
     with OutputLogger(str(logdir), live=None):
         if not args.skip_clean:

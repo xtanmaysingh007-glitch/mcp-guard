@@ -8,6 +8,9 @@ a safe read-only lookup or a trusted tool) must be refused, by the guard or by t
 If the oracle approves an attacker call, every confirm_oracle number is too kind to the attacker... or
 too kind to us: it would mean a "blocked" in our results could hide an approved attacker step.
 """
+import sys
+from pathlib import Path
+
 import pytest
 from agentdojo.agent_pipeline.tool_execution import tool_result_to_str
 from agentdojo.functions_runtime import FunctionsRuntime
@@ -57,8 +60,15 @@ def attacker_actions(suite_name, injection_id, trust=None):
 
 
 def all_cases():
+    """AgentDojo's own injection tasks only. The M5 tasks (scripts/m5_spec.py) may be registered in the same process
+    by tests/test_m5.py; the oracle doesn't know their attacker values (M5 runs none vs plain tracklimits), and
+    test_m5.py checks the guard on them itself."""
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+    from m5_spec import TASKS as M5_TASKS
     for name in SUITES:
         for inj in get_suite("v1.2.2", name).injection_tasks:
+            if (name, inj) in M5_TASKS:
+                continue
             gap = GUARD_GAPS.get((name, inj))
             marks = pytest.mark.xfail(strict=True, reason="guard gap: " + gap) if gap else ()
             yield pytest.param(name, inj, id=f"{name}-{inj}", marks=marks)

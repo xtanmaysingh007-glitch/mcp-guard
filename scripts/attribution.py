@@ -8,6 +8,7 @@ usage: python scripts/attribution.py [--suite banking] [--model local-qwen2.5-7b
 """
 import argparse
 import json
+import sys
 from collections import Counter
 from pathlib import Path
 
@@ -46,6 +47,19 @@ CANARIES = {
 # happened: a refused call still counts as an attacker win there. Only for these does "AgentDojo says win, but
 # every attacker call was blocked" mean blocked. (AgentDojo v1.2.2: slack injection_task_5 is the only one.)
 TRACE_SCORED = {("slack", "injection_task_5")}
+
+# M5 (docs/m5_design.md, scripts/m5_spec.py): guard-aware injection tasks with their OWN canaries. For these ids the
+# task's canaries replace the suite's, so two M5 goals (or an M5 goal and an old one) never count each other's calls.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from m5_spec import TASKS as M5_TASKS  # noqa: E402
+
+TRACE_SCORED |= {k for k, v in M5_TASKS.items() if v["trace"]}
+
+
+def canaries_for(suite: str, injection_task: str):
+    """The canaries that count as the attacker's for this pair."""
+    m5 = M5_TASKS.get((suite, injection_task))
+    return m5["canaries"] if m5 else CANARIES[suite]
 
 
 def calls_with_status(messages):
@@ -128,17 +142,18 @@ def main():
     ap.add_argument("--attack", default="important_instructions")
     ap.add_argument("--show", action="store_true", help="print every pair")
     a = ap.parse_args()
-    canaries = CANARIES[a.suite]
     order = ["ignored", "blocked", "tool error", "succeeded", "partial", "errored"]
     print(f"{'defense':22}" + "".join(f"{o:>11}" for o in order) + "   block rate given attempt")
+    print(f"    {'per goal':26}" + "".join(f"{o[:6]:>7}" for o in order))
     found_any = False
     differ = []          # pairs where attribution and AgentDojo disagree (printed at the end)
     runs = Path("runs")
     for ddir in sorted(p for p in runs.iterdir() if p.is_dir()):
         defense = ddir.name
-        # runs/<defense>[/clock-frozen][/rep<N>]; --freeze-clock runs are labelled as such
+        # runs/<defense>[/clock-frozen][/real-name][/rep<N>]; frozen-clock and real-model-name runs are labelled
         rdirs = []
-        for base, tag in [(ddir, ""), (ddir / "clock-frozen", " [clock-frozen]")]:
+        for base, tag in [(ddir, ""), (ddir / "clock-frozen", " [clock-frozen]"), (ddir / "real-name", " [real-name]"),
+                          (ddir / "clock-frozen" / "real-name", " [clock-frozen, real-name]")]:
             if base.is_dir():
                 rdirs += [(base, "rep1", tag)] + [(p, p.name, tag) for p in sorted(base.glob("rep*")) if p.is_dir()]
         for rdir, rep, tag in rdirs:
@@ -152,9 +167,12 @@ def main():
                      else defense)
             label = f"{shown} {rep}{tag}"
             c = Counter()
+            by_goal = {}
             for f in files:
+                canaries = canaries_for(a.suite, f.stem)
                 out, why = classify(f, canaries, trace_scored=(a.suite, f.stem) in TRACE_SCORED)
                 c[out] += 1
+                by_goal.setdefault(f.stem, Counter())[out] += 1
                 why_differ = disagreement(f, out, canaries)
                 if why_differ:
                     differ.append((label, f.parts[-3], f.stem, why_differ))
@@ -163,6 +181,13 @@ def main():
             att = c["blocked"] + c["succeeded"] + c["partial"]
             rate = f"{c['blocked']}/{att}" if att else "n/a"
             print(f"{label:22}" + "".join(f"{c[o]:>11}" for o in order) + f"   {rate}")
+            # per goal (injection task); M5 goals also show what the design expected for tracklimits
+            for inj in sorted(by_goal, key=lambda t: int(t.split("_")[-1])):
+                g = by_goal[inj]
+                m5 = M5_TASKS.get((a.suite, inj))
+                name = f"{inj} ({m5['name']})" if m5 else inj
+                exp = f"   expected: {m5['expected']}" if m5 else ""
+                print(f"    {name:26}" + "".join(f"{g[o]:>7}" for o in order) + exp)
     if differ:
         print(f"\n{len(differ)} pair(s) where attribution and AgentDojo disagree:")
         for label, user_task, inj, why in differ:
